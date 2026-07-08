@@ -23,17 +23,27 @@ export default function InboxScreen() {
               </ThemedText>
               <ThemedText type="subtitle">Messages</ThemedText>
               <ThemedText themeColor="textSecondary">
-                One barebones thread wired to Ink.
+                Shared story state, delivered like a phone.
               </ThemedText>
             </View>
 
-            <Link href={'/settings' as Href} asChild>
-              <Pressable style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}>
-                <ThemedView type="backgroundElement" style={styles.settingsButtonSurface}>
-                  <ThemedText type="smallBold">Settings</ThemedText>
-                </ThemedView>
-              </Pressable>
-            </Link>
+            <View style={styles.headerActions}>
+              <Link href={'/explore' as Href} asChild>
+                <Pressable style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}>
+                  <ThemedView type="backgroundElement" style={styles.settingsButtonSurface}>
+                    <ThemedText type="smallBold">Phone</ThemedText>
+                  </ThemedView>
+                </Pressable>
+              </Link>
+
+              <Link href={'/settings' as Href} asChild>
+                <Pressable style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}>
+                  <ThemedView type="backgroundElement" style={styles.settingsButtonSurface}>
+                    <ThemedText type="smallBold">Settings</ThemedText>
+                  </ThemedView>
+                </Pressable>
+              </Link>
+            </View>
           </View>
         </View>
 
@@ -109,6 +119,10 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     borderRadius: 14,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   settingsButtonSurface: {
     borderRadius: 14,

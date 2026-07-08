@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { buildConversationDisplayItems, ConversationDisplayItem } from '@/game/side-effects';
 import { MessageEvent } from '@/game/types';
 import { toDisplayName, useGame } from '@/game/game-provider';
 import { useTheme } from '@/hooks/use-theme';
@@ -14,7 +15,13 @@ export default function ConversationScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const theme = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
-  const { conversationsById, startConversation, choose, restartConversation } = useGame();
+  const {
+    conversationsById,
+    conversationTimelineById,
+    startConversation,
+    choose,
+    restartConversation,
+  } = useGame();
   const conversation = conversationId ? conversationsById[conversationId] : undefined;
 
   useEffect(() => {
@@ -34,8 +41,9 @@ export default function ConversationScreen() {
     );
   }
 
-  const messageEvents = conversation.events.filter(
-    (event): event is MessageEvent => event.type === 'message'
+  const displayItems = buildConversationDisplayItems(
+    conversation,
+    conversationTimelineById[conversation.id] ?? []
   );
 
   return (
@@ -47,7 +55,7 @@ export default function ConversationScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          {messageEvents.length === 0 ? (
+          {displayItems.length === 0 ? (
             <View style={styles.emptyState}>
               <ThemedText type="smallBold">{conversation.title}</ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.emptyText}>
@@ -55,14 +63,18 @@ export default function ConversationScreen() {
               </ThemedText>
             </View>
           ) : (
-            messageEvents.map((event) => (
-              <MessageBubble
-                key={event.id}
-                event={event}
-                isPlayer={event.direction === 'outgoing'}
-                accentColor={theme.text}
-              />
-            ))
+            displayItems.map((item) =>
+              item.type === 'message' ? (
+                <MessageBubble
+                  key={item.id}
+                  event={item.event}
+                  isPlayer={item.event.direction === 'outgoing'}
+                  accentColor={theme.text}
+                />
+              ) : (
+                <TimelineMarker key={item.id} item={item} />
+              )
+            )
           )}
 
           {conversation.activeTyping ? (
@@ -83,14 +95,6 @@ export default function ConversationScreen() {
             />
           ))}
 
-          {conversation.status === 'ended' ? (
-            <ThemedView type="backgroundElement" style={styles.sceneEnded}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Scene ended
-              </ThemedText>
-            </ThemedView>
-          ) : null}
-
           {conversation.status !== 'idle' ? (
             <Pressable
               onPress={() => restartConversation(conversation.id)}
@@ -101,6 +105,24 @@ export default function ConversationScreen() {
         </View>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function TimelineMarker({ item }: { item: Extract<ConversationDisplayItem, { type: 'meta' }> }) {
+  return (
+    <View style={styles.metaRow}>
+      <ThemedView type="backgroundElement" style={styles.metaSurface}>
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          {toMetaLabel(item.eventType)}
+        </ThemedText>
+        <ThemedText>{item.title}</ThemedText>
+        {item.detail ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {item.detail}
+          </ThemedText>
+        ) : null}
+      </ThemedView>
+    </View>
   );
 }
 
@@ -115,6 +137,18 @@ function TypingBubble({ speakerId }: { speakerId: string }) {
       </ThemedView>
     </View>
   );
+}
+
+function toMetaLabel(eventType: Extract<ConversationDisplayItem, { type: 'meta' }>['eventType']) {
+  if (eventType === 'notification') {
+    return 'Notification';
+  }
+
+  if (eventType === 'unlock-app') {
+    return 'Unlocked';
+  }
+
+  return 'Status';
 }
 
 function MessageBubble({
@@ -206,6 +240,17 @@ const styles = StyleSheet.create({
   typingBubble: {
     minWidth: 120,
   },
+  metaRow: {
+    alignItems: 'center',
+  },
+  metaSurface: {
+    maxWidth: '92%',
+    borderRadius: 12,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.half,
+  },
   speakerLabel: {
     textTransform: 'capitalize',
   },
@@ -225,12 +270,6 @@ const styles = StyleSheet.create({
   },
   choiceText: {
     lineHeight: 22,
-  },
-  sceneEnded: {
-    borderRadius: 14,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
   },
   secondaryButton: {
     alignItems: 'center',

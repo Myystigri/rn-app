@@ -1,21 +1,54 @@
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { conversationDefinitionById, conversationDefinitions, mainStoryDefinition } from '@/game/catalog';
+import {
+  conversationDefinitionById,
+  conversationDefinitions,
+  mainStoryDefinition,
+  phoneAppDefinitionById,
+  phoneAppDefinitions,
+} from '@/game/catalog';
+import {
+  buildConversationState,
+  clearPendingDelivery,
+  createDeliveryRuntime,
+  DeliveryRuntime,
+  getEventDelayMs,
+  hasDuePendingDelivery,
+  markEventDelivered,
+  reconcileDeliveryRuntime,
+  resetDeliveryRuntime,
+  scheduleDelayedDelivery,
+  toPersistedDeliveryState,
+} from '@/game/delivery';
 import { InkStorySession } from '@/game/ink-session';
-import { defaultGameSettings, getIncomingMessageDelayMs } from '@/game/settings';
 import { loadGameSettings, saveGameSettings } from '@/game/persistence/game-settings-store';
 import {
   deleteGameSnapshot,
   loadGameSnapshot,
   saveGameSnapshot,
 } from '@/game/persistence/game-save-store';
-import { ConversationState, GameSettings, MessageEvent, TypingEvent } from '@/game/types';
+import {
+  buildPhoneApps,
+  createInitialSideEffectsState,
+  reduceGameSideEffects,
+} from '@/game/side-effects';
+import { defaultGameSettings } from '@/game/settings';
+import {
+  ConversationState,
+  ConversationTimelineEntry,
+  GameSettings,
+  NotificationEvent,
+  PhoneAppState,
+} from '@/game/types';
 
 type GameContextValue = {
   conversations: ConversationState[];
   conversationsById: Record<string, ConversationState>;
+  apps: PhoneAppState[];
+  notifications: NotificationEvent[];
+  conversationTimelineById: Record<string, ConversationTimelineEntry[]>;
   settings: GameSettings;
   startConversation: (conversationId: string) => Promise<void>;
   choose: (conversationId: string, choiceId: number) => Promise<void>;
@@ -24,12 +57,6 @@ type GameContextValue = {
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
-
-type DeliveryRuntime = {
-  activeTyping: TypingEvent | null;
-  timerId: ReturnType<typeof setTimeout> | null;
-  visibleEventCount: number;
-};
 
 function createIdleConversationState(definition: (typeof conversationDefinitions)[number]): ConversationState {
   return {
@@ -53,7 +80,7 @@ function createInitialConversationState() {
 
 function createInitialDeliveryRuntime() {
   return Object.fromEntries(
-    conversationDefinitions.map((definition) => [definition.id, createDeliveryRuntime(0)])
+    conversationDefinitions.map((definition) => [definition.id, createDeliveryRuntime()])
   ) as Record<string, DeliveryRuntime>;
 }
 
@@ -66,14 +93,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const clearAllDeliveryTimersRef = useRef<() => void>(() => {});
   const [conversationsById, setConversationsById] =
     useState<Record<string, ConversationState>>(createInitialConversationState);
+  const [sideEffects, setSideEffects] = useState(createInitialSideEffectsState);
   const [settings, setSettings] = useState<GameSettings>(defaultGameSettings);
   const [isHydrated, setIsHydrated] = useState(false);
   const settingsRef = useRef<GameSettings>(defaultGameSettings);
+  const apps = buildPhoneApps(phoneAppDefinitions, sideEffects);
 
   useEffect(() => {
     flushAllConversationDeliveryRef.current = flushAllConversationDelivery;
     clearAllDeliveryTimersRef.current = clearAllDeliveryTimers;
   });
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        flushAllConversationDeliveryRef.current();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,12 +144,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
                 continue;
               }
 
-              const visibleEventCount = clampVisibleEventCount(
-                snapshot.conversationsById[definition.id]?.visibleEventCount ?? conversationSnapshot.events.length,
-                conversationSnapshot.events.length
+              nextDelivery[definition.id] = createDeliveryRuntime(
+                snapshot.conversationsById[definition.id]?.delivery ?? {
+                  visibleEventCount: conversationSnapshot.events.length,
+                }
               );
-
-              nextDelivery[definition.id] = createDeliveryRuntime(visibleEventCount);
+              reconcileDeliveryRuntime(
+                nextDelivery[definition.id],
+                conversationSnapshot,
+                savedSettings
+              );
               nextConversationsById[definition.id] = buildConversationState(
                 conversationSnapshot,
                 nextDelivery[definition.id]
@@ -137,6 +182,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       storySessionRef.current = nextStorySession;
       deliveryRef.current = nextDelivery;
       setConversationsById(nextConversationsById);
+      setSideEffects(reduceGameSideEffects(nextConversationsById, phoneAppDefinitionById));
       setIsHydrated(true);
       flushAllConversationDeliveryRef.current();
     }
@@ -165,7 +211,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
 
     session.startConversation(conversationId);
-    commitAllConversationStates();
+    commitAllConversationStates(session);
     await persistGame();
     flushAllConversationDelivery();
   }
@@ -181,7 +227,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
 
     session.choose(conversationId, choiceId);
-    commitAllConversationStates();
+    commitAllConversationStates(session);
     await persistGame();
     flushAllConversationDelivery();
   }
@@ -195,6 +241,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     storySessionRef.current = new InkStorySession(mainStoryDefinition, conversationDefinitions);
     deliveryRef.current = createInitialDeliveryRuntime();
     setConversationsById(createInitialConversationState());
+    setSideEffects(createInitialSideEffectsState());
 
     await runGamePersistence(async () => {
       await deleteGameSnapshot(db);
@@ -221,56 +268,37 @@ export function GameProvider({ children }: { children: ReactNode }) {
     for (const definition of conversationDefinitions) {
       const conversationId = definition.id;
       const runtime = deliveryRef.current[conversationId];
-      if (!runtime || !runtime.activeTyping) {
+      if (!runtime) {
         continue;
       }
 
       clearConversationDeliveryTimer(conversationId);
-      runtime.activeTyping = null;
-      commitConversationState(conversationId);
-      flushConversationDelivery(conversationId);
-    }
-  }
-
-  function commitConversationState(conversationId: string) {
-    const session = storySessionRef.current;
-    const runtime = deliveryRef.current[conversationId];
-    const sessionState = session?.conversationSnapshot(conversationId);
-
-    if (!sessionState || !runtime) {
-      return;
+      clearPendingDelivery(runtime);
     }
 
-    const nextState = buildConversationState(sessionState, runtime);
-
-    setConversationsById((current) => ({
-      ...current,
-      [conversationId]: nextState,
-    }));
+    flushAllConversationDelivery();
   }
 
-  function commitAllConversationStates() {
-    const session = storySessionRef.current;
+  function commitAllConversationStates(session = storySessionRef.current) {
     if (!session) {
       return;
     }
 
-    setConversationsById((current) => {
-      const nextConversationsById = { ...current };
+    const nextConversationsById = { ...createInitialConversationState() };
 
-      for (const definition of conversationDefinitions) {
-        const sessionState = session.conversationSnapshot(definition.id);
-        const runtime = deliveryRef.current[definition.id];
+    for (const definition of conversationDefinitions) {
+      const sessionState = session.conversationSnapshot(definition.id);
+      const runtime = deliveryRef.current[definition.id];
 
-        if (!sessionState || !runtime) {
-          continue;
-        }
-
-        nextConversationsById[definition.id] = buildConversationState(sessionState, runtime);
+      if (!sessionState || !runtime) {
+        continue;
       }
 
-      return nextConversationsById;
-    });
+      nextConversationsById[definition.id] = buildConversationState(sessionState, runtime);
+    }
+
+    setConversationsById(nextConversationsById);
+    setSideEffects(reduceGameSideEffects(nextConversationsById, phoneAppDefinitionById));
   }
 
   async function persistGame() {
@@ -279,15 +307,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const visibleEventCounts = Object.fromEntries(
+    const deliveryByConversationId = Object.fromEntries(
       conversationDefinitions.map((definition) => [
         definition.id,
-        deliveryRef.current[definition.id]?.visibleEventCount ?? 0,
+        toPersistedDeliveryState(deliveryRef.current[definition.id] ?? createDeliveryRuntime()),
       ])
-    ) as Record<string, number>;
+    );
 
     await runGamePersistence(async () => {
-      await saveGameSnapshot(db, session.serialize(visibleEventCounts));
+      await saveGameSnapshot(db, session.serialize(deliveryByConversationId));
     }, 'Failed to persist game state');
   }
 
@@ -304,6 +332,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       value={{
         conversations: conversationDefinitions.map((definition) => conversationsById[definition.id]),
         conversationsById,
+        apps,
+        notifications: sideEffects.notifications,
+        conversationTimelineById: sideEffects.timelineByConversationId,
         settings,
         startConversation,
         choose,
@@ -329,51 +360,61 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
 
     clearConversationDeliveryTimer(conversationId);
-    runtime.activeTyping = null;
 
     const sessionState = session.conversationSnapshot(conversationId);
     if (!sessionState) {
       return;
     }
 
+    reconcileDeliveryRuntime(runtime, sessionState, settingsRef.current);
+
     while (runtime.visibleEventCount < sessionState.events.length) {
       const nextEvent = sessionState.events[runtime.visibleEventCount];
+      const now = new Date();
+
+      if (hasDuePendingDelivery(runtime, nextEvent, now)) {
+        markEventDelivered(runtime, now);
+        continue;
+      }
+
       const delayMs = getEventDelayMs(nextEvent, settingsRef.current);
 
       if (delayMs > 0 && nextEvent.type === 'message') {
-        runtime.activeTyping = {
-          type: 'typing',
-          id: `${nextEvent.id}.typing`,
-          speakerId: nextEvent.speakerId,
-          durationMs: delayMs,
-        };
-        commitConversationState(conversationId);
+        if (runtime.pendingEventId !== nextEvent.id || !runtime.availableAt) {
+          scheduleDelayedDelivery(runtime, nextEvent, delayMs, now);
+        } else {
+          reconcileDeliveryRuntime(runtime, sessionState, settingsRef.current, now);
+        }
+
+        const availableAtMs = Date.parse(runtime.availableAt ?? '');
+        if (!Number.isFinite(availableAtMs) || availableAtMs <= now.getTime()) {
+          markEventDelivered(runtime, now);
+          continue;
+        }
+
+        commitAllConversationStates(session);
         runtime.timerId = setTimeout(() => {
           runtime.timerId = null;
-          runtime.activeTyping = null;
-          runtime.visibleEventCount += 1;
-          commitConversationState(conversationId);
+          markEventDelivered(runtime, new Date());
+          commitAllConversationStates(session);
           void persistGame();
           flushConversationDelivery(conversationId);
-        }, delayMs);
+        }, Math.max(0, availableAtMs - now.getTime()));
+        void persistGame();
         return;
       }
 
-      runtime.visibleEventCount += 1;
+      markEventDelivered(runtime, now);
     }
 
-    commitConversationState(conversationId);
+    commitAllConversationStates(session);
     void persistGame();
   }
 
   function resetConversationDelivery(conversationId: string) {
-    return prepareConversationDelivery(conversationId, 0);
-  }
-
-  function prepareConversationDelivery(conversationId: string, visibleEventCount: number) {
+    const runtime = deliveryRef.current[conversationId] ?? createDeliveryRuntime();
     clearConversationDeliveryTimer(conversationId);
-
-    const runtime = createDeliveryRuntime(visibleEventCount);
+    resetDeliveryRuntime(runtime, 0);
     deliveryRef.current[conversationId] = runtime;
     return runtime;
   }
@@ -434,42 +475,6 @@ export function getConversationPreview(conversation: ConversationState) {
   }
 
   return 'Open the thread and start the scene.';
-}
-
-function buildConversationState(
-  sessionState: ConversationState,
-  runtime: DeliveryRuntime
-): ConversationState {
-  const visibleEventCount = clampVisibleEventCount(runtime.visibleEventCount, sessionState.events.length);
-  const hasPendingDeliveries = visibleEventCount < sessionState.events.length;
-
-  return {
-    ...sessionState,
-    status: hasPendingDeliveries ? 'active' : sessionState.status,
-    events: sessionState.events.slice(0, visibleEventCount),
-    pendingChoices: hasPendingDeliveries ? [] : sessionState.pendingChoices,
-    activeTyping: runtime.activeTyping,
-  };
-}
-
-function createDeliveryRuntime(visibleEventCount: number): DeliveryRuntime {
-  return {
-    activeTyping: null,
-    timerId: null,
-    visibleEventCount,
-  };
-}
-
-function clampVisibleEventCount(visibleEventCount: number, totalEventCount: number) {
-  return Math.max(0, Math.min(visibleEventCount, totalEventCount));
-}
-
-function getEventDelayMs(event: ConversationState['events'][number], settings: GameSettings) {
-  if (event.type !== 'message') {
-    return 0;
-  }
-
-  return getIncomingMessageDelayMs(event as MessageEvent, settings);
 }
 
 export function toDisplayName(value: string) {

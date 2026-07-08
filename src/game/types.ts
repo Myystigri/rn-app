@@ -2,6 +2,8 @@ export type MessageDirection = 'incoming' | 'outgoing' | 'system';
 
 export type DelayProfileId = 'fast' | 'normal' | 'slow';
 
+export type ConversationStatus = 'idle' | 'active' | 'ended';
+
 export type PendingChoice = {
   id: number;
   text: string;
@@ -63,6 +65,7 @@ export type CompiledInkStory = Record<string, unknown>;
 export type StoryDefinition = {
   id: string;
   compiledStory: CompiledInkStory;
+  contentVersion: string;
 };
 
 export type ConversationDefinition = {
@@ -71,10 +74,17 @@ export type ConversationDefinition = {
   startSceneId: string;
 };
 
+export type PersistedDeliveryState = {
+  visibleEventCount: number;
+  pendingEventId: string | null;
+  availableAt: string | null;
+  deliveredAt: string | null;
+};
+
 export type ConversationState = {
   id: string;
   title: string;
-  status: 'idle' | 'active' | 'ended';
+  status: ConversationStatus;
   events: GameEvent[];
   pendingChoices: PendingChoice[];
   activeTyping: TypingEvent | null;
@@ -83,4 +93,30 @@ export type ConversationState = {
 export type GameSettings = {
   incomingMessageDelayEnabled: boolean;
   incomingMessageDelayProfile: DelayProfileId;
+};
+
+export type PhoneAppDefinition = {
+  id: string;
+  title: string;
+  description: string;
+  route: string | null;
+  unlockedByDefault: boolean;
+};
+
+export type PhoneAppState = PhoneAppDefinition & {
+  isUnlocked: boolean;
+  badgeCount: number;
+};
+
+export type ConversationTimelineEntry = {
+  id: string;
+  eventType: 'notification' | 'unlock-app' | 'scene-ended';
+  title: string;
+  detail?: string;
+};
+
+export type GameSideEffectsState = {
+  notifications: NotificationEvent[];
+  unlockedAppIds: string[];
+  timelineByConversationId: Record<string, ConversationTimelineEntry[]>;
 };

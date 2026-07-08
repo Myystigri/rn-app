@@ -11,9 +11,14 @@ const STORY_SAVE_ID = '__story__';
 type ConversationSaveRow = {
   conversation_id: string;
   status: ConversationState['status'];
+  story_id: string | null;
+  story_version: string | null;
   ink_state_json: string | null;
   event_sequence: number;
   visible_event_count: number | null;
+  delivery_event_id: string | null;
+  delivery_available_at: string | null;
+  last_delivered_at: string | null;
   pending_choices_json: string;
 };
 
@@ -28,9 +33,14 @@ export async function loadGameSnapshot(db: SQLiteDatabase): Promise<InkStorySave
       SELECT
         conversation_id,
         status,
+        story_id,
+        story_version,
         ink_state_json,
         event_sequence,
         visible_event_count,
+        delivery_event_id,
+        delivery_available_at,
+        last_delivered_at,
         pending_choices_json
       FROM conversation_saves
     `
@@ -81,13 +91,20 @@ export async function loadGameSnapshot(db: SQLiteDatabase): Promise<InkStorySave
     const events = eventsByConversation.get(row.conversation_id) ?? [];
     conversationsById[row.conversation_id] = {
       status: row.status,
-      visibleEventCount: row.visible_event_count ?? events.length,
       pendingChoices,
       events,
+      delivery: {
+        visibleEventCount: row.visible_event_count ?? events.length,
+        pendingEventId: row.delivery_event_id,
+        availableAt: row.delivery_available_at,
+        deliveredAt: row.last_delivered_at,
+      },
     };
   }
 
   return {
+    storyId: fallbackStoryRow?.story_id ?? undefined,
+    storyVersion: fallbackStoryRow?.story_version ?? undefined,
     inkStateJson: fallbackStoryRow?.ink_state_json ?? undefined,
     sequence: fallbackStoryRow?.event_sequence ?? 0,
     conversationsById,
@@ -109,19 +126,29 @@ export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySav
         INSERT INTO conversation_saves (
           conversation_id,
           status,
+          story_id,
+          story_version,
           ink_state_json,
           event_sequence,
           visible_event_count,
+          delivery_event_id,
+          delivery_available_at,
+          last_delivered_at,
           pending_choices_json,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       STORY_SAVE_ID,
       getStoryStatus(snapshot),
+      snapshot.storyId ?? null,
+      snapshot.storyVersion ?? null,
       snapshot.inkStateJson ?? null,
       snapshot.sequence,
       0,
+      null,
+      null,
+      null,
       JSON.stringify([]),
       new Date().toISOString()
     );
@@ -132,19 +159,29 @@ export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySav
           INSERT INTO conversation_saves (
             conversation_id,
             status,
+            story_id,
+            story_version,
             ink_state_json,
             event_sequence,
             visible_event_count,
+            delivery_event_id,
+            delivery_available_at,
+            last_delivered_at,
             pending_choices_json,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         conversationId,
         conversation.status,
         null,
+        null,
+        null,
         0,
-        conversation.visibleEventCount,
+        conversation.delivery.visibleEventCount,
+        conversation.delivery.pendingEventId,
+        conversation.delivery.availableAt,
+        conversation.delivery.deliveredAt,
         JSON.stringify(conversation.pendingChoices),
         new Date().toISOString()
       );

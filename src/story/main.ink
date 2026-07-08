@@ -92,4 +92,14 @@ I can hear footsteps in the hall.
 # conversation:maya
 Stay here. I am going to keep texting.
 
+# type:unlock-app
+# id:intro.unlock.case-files
+# app:case-files
+
+# type:notification
+# id:intro.notification.case-files
+# app:case-files
+# title:Case Files unlocked
+# body:Maya synced a new surface to your phone.
+
 -> END

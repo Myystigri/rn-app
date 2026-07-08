@@ -17,9 +17,14 @@ export async function migrateGameDbIfNeeded(db: SQLiteDatabase) {
       CREATE TABLE IF NOT EXISTS conversation_saves (
         conversation_id TEXT PRIMARY KEY NOT NULL,
         status TEXT NOT NULL,
+        story_id TEXT,
+        story_version TEXT,
         ink_state_json TEXT,
         event_sequence INTEGER NOT NULL,
         visible_event_count INTEGER NOT NULL DEFAULT 0,
+        delivery_event_id TEXT,
+        delivery_available_at TEXT,
+        last_delivered_at TEXT,
         pending_choices_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -43,7 +48,7 @@ export async function migrateGameDbIfNeeded(db: SQLiteDatabase) {
       );
     `);
 
-    currentDbVersion = 2;
+    currentDbVersion = 3;
   }
 
   if (currentDbVersion === 1) {
@@ -68,5 +73,56 @@ export async function migrateGameDbIfNeeded(db: SQLiteDatabase) {
     currentDbVersion = 2;
   }
 
+  if (currentDbVersion === 2) {
+    const existingColumns = await getTableColumns(db, 'conversation_saves');
+    const migrationStatements: string[] = [];
+
+    if (!existingColumns.has('story_id')) {
+      migrationStatements.push(`
+        ALTER TABLE conversation_saves
+        ADD COLUMN story_id TEXT
+      `);
+    }
+
+    if (!existingColumns.has('story_version')) {
+      migrationStatements.push(`
+        ALTER TABLE conversation_saves
+        ADD COLUMN story_version TEXT
+      `);
+    }
+
+    if (!existingColumns.has('delivery_event_id')) {
+      migrationStatements.push(`
+        ALTER TABLE conversation_saves
+        ADD COLUMN delivery_event_id TEXT
+      `);
+    }
+
+    if (!existingColumns.has('delivery_available_at')) {
+      migrationStatements.push(`
+        ALTER TABLE conversation_saves
+        ADD COLUMN delivery_available_at TEXT
+      `);
+    }
+
+    if (!existingColumns.has('last_delivered_at')) {
+      migrationStatements.push(`
+        ALTER TABLE conversation_saves
+        ADD COLUMN last_delivered_at TEXT
+      `);
+    }
+
+    for (const statement of migrationStatements) {
+      await db.execAsync(statement);
+    }
+
+    currentDbVersion = 3;
+  }
+
   await db.execAsync(`PRAGMA user_version = ${GAME_DATABASE_VERSION}`);
+}
+
+async function getTableColumns(db: SQLiteDatabase, tableName: string) {
+  const rows = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${tableName})`);
+  return new Set(rows.map((row) => row.name));
 }

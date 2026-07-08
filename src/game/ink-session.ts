@@ -6,6 +6,7 @@ import {
   GameEvent,
   MessageDirection,
   PendingChoice,
+  PersistedDeliveryState,
   StoryDefinition,
 } from '@/game/types';
 
@@ -15,10 +16,12 @@ export type ConversationSessionSaveSnapshot = {
   status: ConversationState['status'];
   events: GameEvent[];
   pendingChoices: PendingChoice[];
-  visibleEventCount: number;
+  delivery: PersistedDeliveryState;
 };
 
 export type InkStorySaveSnapshot = {
+  storyId?: string;
+  storyVersion?: string;
   inkStateJson?: string;
   sequence: number;
   conversationsById: Record<string, ConversationSessionSaveSnapshot>;
@@ -99,8 +102,10 @@ export class InkStorySession {
     ) as Record<string, ConversationState>;
   }
 
-  serialize(visibleEventCounts: Record<string, number>): InkStorySaveSnapshot {
+  serialize(deliveryByConversationId: Record<string, PersistedDeliveryState>): InkStorySaveSnapshot {
     return {
+      storyId: this.storyDefinition.id,
+      storyVersion: this.storyDefinition.contentVersion,
       inkStateJson: this.hasStarted() ? this.story.state.ToJson() : undefined,
       sequence: this.sequence,
       conversationsById: Object.fromEntries(
@@ -113,7 +118,13 @@ export class InkStorySession {
               status: conversation.status,
               events: [...conversation.events],
               pendingChoices: [...conversation.pendingChoices],
-              visibleEventCount: visibleEventCounts[definition.id] ?? conversation.events.length,
+              delivery: {
+                visibleEventCount:
+                  deliveryByConversationId[definition.id]?.visibleEventCount ?? conversation.events.length,
+                pendingEventId: deliveryByConversationId[definition.id]?.pendingEventId ?? null,
+                availableAt: deliveryByConversationId[definition.id]?.availableAt ?? null,
+                deliveredAt: deliveryByConversationId[definition.id]?.deliveredAt ?? null,
+              },
             },
           ];
         })
@@ -187,6 +198,18 @@ export class InkStorySession {
 
     if (hasStartedConversation && !saveSnapshot.inkStateJson) {
       throw new Error(`Missing Ink state for persisted story "${this.storyDefinition.id}"`);
+    }
+
+    if (saveSnapshot.storyId !== this.storyDefinition.id) {
+      throw new Error(
+        `Story id mismatch. Expected "${this.storyDefinition.id}", received "${saveSnapshot.storyId ?? 'unknown'}"`
+      );
+    }
+
+    if (saveSnapshot.storyVersion !== this.storyDefinition.contentVersion) {
+      throw new Error(
+        `Story version mismatch. Expected "${this.storyDefinition.contentVersion}", received "${saveSnapshot.storyVersion ?? 'unknown'}"`
+      );
     }
 
     this.sequence = saveSnapshot.sequence;
