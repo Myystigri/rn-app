@@ -60,11 +60,15 @@ export type GameEvent =
 
 export type CompiledInkStory = Record<string, unknown>;
 
+export type StoryDefinition = {
+  id: string;
+  compiledStory: CompiledInkStory;
+};
+
 export type ConversationDefinition = {
   id: string;
   title: string;
   startSceneId: string;
-  compiledStory: CompiledInkStory;
 };
 
 export type ConversationState = {

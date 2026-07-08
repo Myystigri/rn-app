@@ -1,4 +1,4 @@
-=== introduction ===
+=== maya_introduction ===
 
 # id:intro.maya.001
 # speaker:maya
@@ -18,7 +18,7 @@ Are you there?
     # delay:1400
     I think someone is inside my apartment.
 
-    -> apartment_warning
+    -> maya_apartment_warning
 
 * [Who is this?]
     # id:intro.player.002
@@ -37,9 +37,9 @@ Are you there?
     # delay:1000
     I do not have time for this.
 
-    -> apartment_warning
+    -> maya_apartment_warning
 
-=== apartment_warning ===
+=== maya_apartment_warning ===
 
 # id:intro.maya.005
 # speaker:maya
@@ -58,7 +58,7 @@ I am serious. The front door just moved.
     # conversation:maya
     If I make noise, whoever is out there will know where I am.
 
-    -> waiting
+    -> maya_waiting
 
 * [Lock yourself in the bathroom.]
     # id:intro.player.004
@@ -71,9 +71,9 @@ I am serious. The front door just moved.
     # conversation:maya
     Doing it now.
 
-    -> waiting
+    -> maya_waiting
 
-=== waiting ===
+=== maya_waiting ===
 
 # id:intro.maya.008
 # speaker:maya

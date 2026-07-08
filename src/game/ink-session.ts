@@ -6,140 +6,248 @@ import {
   GameEvent,
   MessageDirection,
   PendingChoice,
+  StoryDefinition,
 } from '@/game/types';
 
 type ParsedTags = Record<string, string>;
-export type InkSessionSaveSnapshot = {
+
+export type ConversationSessionSaveSnapshot = {
   status: ConversationState['status'];
   events: GameEvent[];
   pendingChoices: PendingChoice[];
-  sequence: number;
   visibleEventCount: number;
-  inkStateJson?: string;
 };
 
-export class InkConversationSession {
-  private readonly definition: ConversationDefinition;
-  private readonly story: Story;
-  private readonly events: GameEvent[] = [];
-  private pendingChoices: PendingChoice[] = [];
-  private sequence = 0;
-  private status: ConversationState['status'] = 'idle';
+export type InkStorySaveSnapshot = {
+  inkStateJson?: string;
+  sequence: number;
+  conversationsById: Record<string, ConversationSessionSaveSnapshot>;
+};
 
-  constructor(definition: ConversationDefinition, saveSnapshot?: InkSessionSaveSnapshot) {
-    this.definition = definition;
-    this.story = new Story(definition.compiledStory);
+export class InkStorySession {
+  private readonly storyDefinition: StoryDefinition;
+  private readonly conversationDefinitions: ConversationDefinition[];
+  private readonly conversationDefinitionById: Record<string, ConversationDefinition>;
+  private readonly story: Story;
+  private conversationsById: Record<string, ConversationState>;
+  private sequence = 0;
+
+  constructor(
+    storyDefinition: StoryDefinition,
+    conversationDefinitions: ConversationDefinition[],
+    saveSnapshot?: InkStorySaveSnapshot
+  ) {
+    this.storyDefinition = storyDefinition;
+    this.conversationDefinitions = conversationDefinitions;
+    this.conversationDefinitionById = Object.fromEntries(
+      conversationDefinitions.map((definition) => [definition.id, definition])
+    ) as Record<string, ConversationDefinition>;
+    this.story = new Story(storyDefinition.compiledStory);
+    this.conversationsById = createInitialConversationStates(conversationDefinitions);
 
     if (saveSnapshot) {
       this.restore(saveSnapshot);
     }
   }
 
-  static restore(definition: ConversationDefinition, saveSnapshot: InkSessionSaveSnapshot) {
-    return new InkConversationSession(definition, saveSnapshot);
+  static restore(
+    storyDefinition: StoryDefinition,
+    conversationDefinitions: ConversationDefinition[],
+    saveSnapshot: InkStorySaveSnapshot
+  ) {
+    return new InkStorySession(storyDefinition, conversationDefinitions, saveSnapshot);
   }
 
-  start() {
-    if (this.status !== 'idle') {
+  startConversation(conversationId: string) {
+    const conversation = this.conversationsById[conversationId];
+    const definition = this.conversationDefinitionById[conversationId];
+    if (!conversation || !definition || conversation.status !== 'idle') {
       return this.snapshot();
     }
 
-    this.story.ChoosePathString(this.definition.startSceneId);
-    this.status = 'active';
-    return this.advance();
+    this.story.ChoosePathString(definition.startSceneId);
+    conversation.status = 'active';
+    return this.advance(conversationId, definition.startSceneId);
   }
 
-  choose(choiceIndex: number) {
-    if (this.status !== 'active') {
+  choose(conversationId: string, choiceIndex: number) {
+    const conversation = this.conversationsById[conversationId];
+    if (!conversation || conversation.status !== 'active') {
       return this.snapshot();
     }
 
-    this.pendingChoices = [];
+    conversation.pendingChoices = [];
     this.story.ChooseChoiceIndex(choiceIndex);
-    return this.advance();
+    return this.advance(conversationId, this.conversationDefinitionById[conversationId]?.startSceneId);
   }
 
-  snapshot(): ConversationState {
-    return {
-      id: this.definition.id,
-      title: this.definition.title,
-      status: this.status,
-      events: [...this.events],
-      pendingChoices: [...this.pendingChoices],
-      activeTyping: null,
-    };
+  conversationSnapshot(conversationId: string): ConversationState | null {
+    const conversation = this.conversationsById[conversationId];
+    if (!conversation) {
+      return null;
+    }
+
+    return cloneConversationState(conversation);
   }
 
-  serialize(): InkSessionSaveSnapshot {
+  snapshot() {
+    return Object.fromEntries(
+      this.conversationDefinitions.map((definition) => [
+        definition.id,
+        cloneConversationState(this.conversationsById[definition.id]),
+      ])
+    ) as Record<string, ConversationState>;
+  }
+
+  serialize(visibleEventCounts: Record<string, number>): InkStorySaveSnapshot {
     return {
-      status: this.status,
-      events: [...this.events],
-      pendingChoices: [...this.pendingChoices],
+      inkStateJson: this.hasStarted() ? this.story.state.ToJson() : undefined,
       sequence: this.sequence,
-      visibleEventCount: this.events.length,
-      inkStateJson: this.status === 'idle' ? undefined : this.story.state.ToJson(),
+      conversationsById: Object.fromEntries(
+        this.conversationDefinitions.map((definition) => {
+          const conversation = this.conversationsById[definition.id];
+
+          return [
+            definition.id,
+            {
+              status: conversation.status,
+              events: [...conversation.events],
+              pendingChoices: [...conversation.pendingChoices],
+              visibleEventCount: visibleEventCounts[definition.id] ?? conversation.events.length,
+            },
+          ];
+        })
+      ),
     };
   }
 
-  private advance() {
+  private advance(defaultConversationId: string, sceneId = defaultConversationId) {
     while (this.story.canContinue) {
       const rawText = (this.story.Continue() ?? '').trim();
       const tags = parseTags(this.story.currentTags ?? []);
-      this.pushEvents(
-        toEvents({
-          conversationId: this.definition.id,
-          rawText,
-          tags,
-          nextId: () => this.nextGeneratedId(),
-        })
-      );
+      const events = toEvents({
+        conversationId: defaultConversationId,
+        rawText,
+        tags,
+        nextId: () => this.nextGeneratedId(),
+      });
+
+      this.pushEvents(defaultConversationId, events);
+    }
+
+    const conversation = this.conversationsById[defaultConversationId];
+    if (!conversation) {
+      return this.snapshot();
     }
 
     if (this.story.currentChoices.length > 0) {
-      this.pendingChoices = this.story.currentChoices.map((choice, index) => ({
+      conversation.status = 'active';
+      conversation.pendingChoices = this.story.currentChoices.map((choice, index) => ({
         id: index,
         text: choice.text,
       }));
     } else {
-      this.pendingChoices = [];
-      this.status = 'ended';
-      this.events.push({
+      conversation.pendingChoices = [];
+      conversation.status = 'ended';
+      conversation.events.push({
         type: 'scene-ended',
         id: this.nextGeneratedId('scene'),
-        sceneId: this.definition.startSceneId,
+        sceneId,
       });
     }
 
     return this.snapshot();
   }
 
-  private pushEvents(events: GameEvent[]) {
+  private pushEvents(defaultConversationId: string, events: GameEvent[]) {
     for (const event of events) {
-      if (event.type !== 'choices') {
-        this.events.push(event);
+      const conversationId = getEventConversationId(event, defaultConversationId);
+      const conversation = this.conversationsById[conversationId];
+      if (!conversation || event.type === 'choices') {
+        continue;
       }
+
+      if (conversation.status === 'idle') {
+        conversation.status = 'active';
+      }
+
+      conversation.events.push(event);
     }
   }
 
   private nextGeneratedId(prefix = 'event') {
     this.sequence += 1;
-    return `${this.definition.id}.${prefix}.${this.sequence}`;
+    return `${this.storyDefinition.id}.${prefix}.${this.sequence}`;
   }
 
-  private restore(saveSnapshot: InkSessionSaveSnapshot) {
-    if (saveSnapshot.status !== 'idle' && !saveSnapshot.inkStateJson) {
-      throw new Error(`Missing Ink state for persisted conversation "${this.definition.id}"`);
+  private restore(saveSnapshot: InkStorySaveSnapshot) {
+    const hasStartedConversation = Object.values(saveSnapshot.conversationsById).some(
+      (conversation) => conversation.status !== 'idle'
+    );
+
+    if (hasStartedConversation && !saveSnapshot.inkStateJson) {
+      throw new Error(`Missing Ink state for persisted story "${this.storyDefinition.id}"`);
     }
 
-    this.status = saveSnapshot.status;
     this.sequence = saveSnapshot.sequence;
-    this.events.push(...saveSnapshot.events);
-    this.pendingChoices = [...saveSnapshot.pendingChoices];
+
+    for (const definition of this.conversationDefinitions) {
+      const savedConversation = saveSnapshot.conversationsById[definition.id];
+      if (!savedConversation) {
+        continue;
+      }
+
+      this.conversationsById[definition.id] = {
+        id: definition.id,
+        title: definition.title,
+        status: savedConversation.status,
+        events: [...savedConversation.events],
+        pendingChoices: [...savedConversation.pendingChoices],
+        activeTyping: null,
+      };
+    }
 
     if (saveSnapshot.inkStateJson) {
       this.story.state.LoadJson(saveSnapshot.inkStateJson);
     }
   }
+
+  private hasStarted() {
+    return Object.values(this.conversationsById).some((conversation) => conversation.status !== 'idle');
+  }
+}
+
+function createInitialConversationStates(conversationDefinitions: ConversationDefinition[]) {
+  return Object.fromEntries(
+    conversationDefinitions.map((definition) => [
+      definition.id,
+      {
+        id: definition.id,
+        title: definition.title,
+        status: 'idle',
+        events: [],
+        pendingChoices: [],
+        activeTyping: null,
+      },
+    ])
+  ) as Record<string, ConversationState>;
+}
+
+function cloneConversationState(conversation: ConversationState): ConversationState {
+  return {
+    ...conversation,
+    events: [...conversation.events],
+    pendingChoices: [...conversation.pendingChoices],
+    activeTyping: null,
+  };
+}
+
+function getEventConversationId(event: GameEvent, defaultConversationId: string) {
+  if (event.type === 'message') {
+    return event.conversationId;
+  }
+
+  return defaultConversationId;
 }
 
 function toEvents({

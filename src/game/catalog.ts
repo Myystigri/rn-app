@@ -1,12 +1,16 @@
-import { ConversationDefinition } from '@/game/types';
-import mayaStory from '@/story/generated/maya.story.json';
+import { ConversationDefinition, StoryDefinition } from '@/game/types';
+import mainStory from '@/story/generated/main.story.json';
+
+export const mainStoryDefinition: StoryDefinition = {
+  id: 'main',
+  compiledStory: mainStory,
+};
 
 export const conversationDefinitions: ConversationDefinition[] = [
   {
     id: 'maya',
     title: 'Maya',
-    startSceneId: 'introduction',
-    compiledStory: mayaStory,
+    startSceneId: 'maya_introduction',
   },
 ];
 

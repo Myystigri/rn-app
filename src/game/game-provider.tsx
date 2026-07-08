@@ -2,14 +2,14 @@ import { createContext, ReactNode, useContext, useEffect, useRef, useState } fro
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { conversationDefinitionById, conversationDefinitions } from '@/game/catalog';
-import { InkConversationSession } from '@/game/ink-session';
+import { conversationDefinitionById, conversationDefinitions, mainStoryDefinition } from '@/game/catalog';
+import { InkStorySession } from '@/game/ink-session';
 import { defaultGameSettings, getIncomingMessageDelayMs } from '@/game/settings';
 import { loadGameSettings, saveGameSettings } from '@/game/persistence/game-settings-store';
 import {
-  deleteConversationSnapshot,
-  loadConversationSnapshots,
-  saveConversationSnapshot,
+  deleteGameSnapshot,
+  loadGameSnapshot,
+  saveGameSnapshot,
 } from '@/game/persistence/game-save-store';
 import { ConversationState, GameSettings, MessageEvent, TypingEvent } from '@/game/types';
 
@@ -51,18 +51,18 @@ function createInitialConversationState() {
   ) as Record<string, ConversationState>;
 }
 
+function createInitialDeliveryRuntime() {
+  return Object.fromEntries(
+    conversationDefinitions.map((definition) => [definition.id, createDeliveryRuntime(0)])
+  ) as Record<string, DeliveryRuntime>;
+}
+
 export function GameProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
-  const sessionsRef = useRef<Record<string, InkConversationSession>>({});
-  const deliveryRef = useRef<Record<string, DeliveryRuntime>>({});
-  const persistenceQueueRef = useRef<Record<string, Promise<void>>>({});
-  const flushConversationDeliveryRef = useRef<
-    (
-      conversationId: string,
-      activeSessions?: Record<string, InkConversationSession>,
-      activeDelivery?: Record<string, DeliveryRuntime>
-    ) => void
-  >(() => {});
+  const storySessionRef = useRef<InkStorySession | null>(null);
+  const deliveryRef = useRef<Record<string, DeliveryRuntime>>(createInitialDeliveryRuntime());
+  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const flushAllConversationDeliveryRef = useRef<() => void>(() => {});
   const clearAllDeliveryTimersRef = useRef<() => void>(() => {});
   const [conversationsById, setConversationsById] =
     useState<Record<string, ConversationState>>(createInitialConversationState);
@@ -71,7 +71,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const settingsRef = useRef<GameSettings>(defaultGameSettings);
 
   useEffect(() => {
-    flushConversationDeliveryRef.current = flushConversationDelivery;
+    flushAllConversationDeliveryRef.current = flushAllConversationDelivery;
     clearAllDeliveryTimersRef.current = clearAllDeliveryTimers;
   });
 
@@ -79,39 +79,46 @@ export function GameProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     async function hydrate() {
-      const nextSessions: Record<string, InkConversationSession> = {};
-      const nextDelivery: Record<string, DeliveryRuntime> = {};
-      const nextConversationsById = createInitialConversationState();
+      let nextStorySession = new InkStorySession(mainStoryDefinition, conversationDefinitions);
+      const nextDelivery = createInitialDeliveryRuntime();
+      let nextConversationsById = createInitialConversationState();
 
       try {
-        const [snapshots, savedSettings] = await Promise.all([
-          loadConversationSnapshots(db),
+        const [snapshot, savedSettings] = await Promise.all([
+          loadGameSnapshot(db),
           loadGameSettings(db),
         ]);
 
-        for (const definition of conversationDefinitions) {
-          const snapshot = snapshots[definition.id];
-          if (!snapshot) {
-            continue;
-          }
-
+        if (snapshot) {
           try {
-            const session = InkConversationSession.restore(definition, snapshot);
-            const sessionState = session.snapshot();
-            const visibleEventCount = clampVisibleEventCount(
-              snapshot.visibleEventCount,
-              sessionState.events.length
+            nextStorySession = InkStorySession.restore(
+              mainStoryDefinition,
+              conversationDefinitions,
+              snapshot
             );
 
-            nextSessions[definition.id] = session;
-            nextDelivery[definition.id] = createDeliveryRuntime(visibleEventCount);
-            nextConversationsById[definition.id] = buildConversationState(
-              sessionState,
-              nextDelivery[definition.id]
-            );
+            for (const definition of conversationDefinitions) {
+              const conversationSnapshot = nextStorySession.conversationSnapshot(definition.id);
+              if (!conversationSnapshot) {
+                continue;
+              }
+
+              const visibleEventCount = clampVisibleEventCount(
+                snapshot.conversationsById[definition.id]?.visibleEventCount ?? conversationSnapshot.events.length,
+                conversationSnapshot.events.length
+              );
+
+              nextDelivery[definition.id] = createDeliveryRuntime(visibleEventCount);
+              nextConversationsById[definition.id] = buildConversationState(
+                conversationSnapshot,
+                nextDelivery[definition.id]
+              );
+            }
           } catch (error) {
-            console.error(`Failed to restore conversation "${definition.id}"`, error);
-            await deleteConversationSnapshot(db, definition.id);
+            console.error('Failed to restore shared Ink story state', error);
+            await deleteGameSnapshot(db);
+            nextStorySession = new InkStorySession(mainStoryDefinition, conversationDefinitions);
+            nextConversationsById = createInitialConversationState();
           }
         }
 
@@ -127,14 +134,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      sessionsRef.current = nextSessions;
+      storySessionRef.current = nextStorySession;
       deliveryRef.current = nextDelivery;
       setConversationsById(nextConversationsById);
       setIsHydrated(true);
-
-      for (const definition of conversationDefinitions) {
-        flushConversationDeliveryRef.current(definition.id, nextSessions, nextDelivery);
-      }
+      flushAllConversationDeliveryRef.current();
     }
 
     void hydrate();
@@ -146,22 +150,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   async function startConversation(conversationId: string) {
-    if (!isHydrated) {
+    if (!isHydrated || !conversationDefinitionById[conversationId]) {
       return;
     }
 
-    const definition = conversationDefinitionById[conversationId];
-    if (!definition) {
+    const session = storySessionRef.current;
+    if (!session) {
       return;
     }
 
-    const session = new InkConversationSession(definition);
-    sessionsRef.current[conversationId] = session;
-    const runtime = resetConversationDelivery(conversationId);
-    session.start();
-    commitConversationState(conversationId);
-    await persistConversation(conversationId, session, runtime.visibleEventCount);
-    flushConversationDelivery(conversationId);
+    const conversation = session.conversationSnapshot(conversationId);
+    if (conversation?.status === 'idle') {
+      resetConversationDelivery(conversationId);
+    }
+
+    session.startConversation(conversationId);
+    commitAllConversationStates();
+    await persistGame();
+    flushAllConversationDelivery();
   }
 
   async function choose(conversationId: string, choiceId: number) {
@@ -169,31 +175,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const session = sessionsRef.current[conversationId];
+    const session = storySessionRef.current;
     if (!session) {
       return;
     }
 
-    const visibleEventCount = deliveryRef.current[conversationId]?.visibleEventCount ?? 0;
-    const runtime = prepareConversationDelivery(conversationId, visibleEventCount);
-    session.choose(choiceId);
-    commitConversationState(conversationId);
-    await persistConversation(conversationId, session, runtime.visibleEventCount);
-    flushConversationDelivery(conversationId);
+    session.choose(conversationId, choiceId);
+    commitAllConversationStates();
+    await persistGame();
+    flushAllConversationDelivery();
   }
 
   async function restartConversation(conversationId: string) {
-    if (!isHydrated) {
+    if (!isHydrated || !conversationDefinitionById[conversationId]) {
       return;
     }
 
-    delete sessionsRef.current[conversationId];
-    clearConversationDeliveryTimer(conversationId);
-    delete deliveryRef.current[conversationId];
+    clearAllDeliveryTimers();
+    storySessionRef.current = new InkStorySession(mainStoryDefinition, conversationDefinitions);
+    deliveryRef.current = createInitialDeliveryRuntime();
+    setConversationsById(createInitialConversationState());
 
-    await runConversationPersistence(conversationId, async () => {
-      await deleteConversationSnapshot(db, conversationId);
-    }, `Failed to clear conversation "${conversationId}" before restart`);
+    await runGamePersistence(async () => {
+      await deleteGameSnapshot(db);
+    }, 'Failed to clear game state before restart');
 
     await startConversation(conversationId);
   }
@@ -228,14 +233,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }
 
   function commitConversationState(conversationId: string) {
-    const session = sessionsRef.current[conversationId];
+    const session = storySessionRef.current;
     const runtime = deliveryRef.current[conversationId];
+    const sessionState = session?.conversationSnapshot(conversationId);
 
-    if (!session || !runtime) {
+    if (!sessionState || !runtime) {
       return;
     }
 
-    const nextState = buildConversationState(session.snapshot(), runtime);
+    const nextState = buildConversationState(sessionState, runtime);
 
     setConversationsById((current) => ({
       ...current,
@@ -243,17 +249,46 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }));
   }
 
-  async function persistConversation(
-    conversationId: string,
-    session: InkConversationSession,
-    visibleEventCount: number
-  ) {
-    await runConversationPersistence(conversationId, async () => {
-      await saveConversationSnapshot(db, conversationId, {
-        ...session.serialize(),
-        visibleEventCount,
-      });
-    }, `Failed to persist conversation "${conversationId}"`);
+  function commitAllConversationStates() {
+    const session = storySessionRef.current;
+    if (!session) {
+      return;
+    }
+
+    setConversationsById((current) => {
+      const nextConversationsById = { ...current };
+
+      for (const definition of conversationDefinitions) {
+        const sessionState = session.conversationSnapshot(definition.id);
+        const runtime = deliveryRef.current[definition.id];
+
+        if (!sessionState || !runtime) {
+          continue;
+        }
+
+        nextConversationsById[definition.id] = buildConversationState(sessionState, runtime);
+      }
+
+      return nextConversationsById;
+    });
+  }
+
+  async function persistGame() {
+    const session = storySessionRef.current;
+    if (!session) {
+      return;
+    }
+
+    const visibleEventCounts = Object.fromEntries(
+      conversationDefinitions.map((definition) => [
+        definition.id,
+        deliveryRef.current[definition.id]?.visibleEventCount ?? 0,
+      ])
+    ) as Record<string, number>;
+
+    await runGamePersistence(async () => {
+      await saveGameSnapshot(db, session.serialize(visibleEventCounts));
+    }, 'Failed to persist game state');
   }
 
   if (!isHydrated) {
@@ -279,22 +314,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
     </GameContext.Provider>
   );
 
-  function flushConversationDelivery(
-    conversationId: string,
-    activeSessions = sessionsRef.current,
-    activeDelivery = deliveryRef.current
-  ) {
-    const session = activeSessions[conversationId];
-    const runtime = activeDelivery[conversationId];
+  function flushAllConversationDelivery() {
+    for (const definition of conversationDefinitions) {
+      flushConversationDelivery(definition.id);
+    }
+  }
+
+  function flushConversationDelivery(conversationId: string) {
+    const session = storySessionRef.current;
+    const runtime = deliveryRef.current[conversationId];
 
     if (!session || !runtime) {
       return;
     }
 
-    clearConversationDeliveryTimer(conversationId, activeDelivery);
+    clearConversationDeliveryTimer(conversationId);
     runtime.activeTyping = null;
 
-    const sessionState = session.snapshot();
+    const sessionState = session.conversationSnapshot(conversationId);
+    if (!sessionState) {
+      return;
+    }
 
     while (runtime.visibleEventCount < sessionState.events.length) {
       const nextEvent = sessionState.events[runtime.visibleEventCount];
@@ -313,7 +353,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           runtime.activeTyping = null;
           runtime.visibleEventCount += 1;
           commitConversationState(conversationId);
-          void persistConversation(conversationId, session, runtime.visibleEventCount);
+          void persistGame();
           flushConversationDelivery(conversationId);
         }, delayMs);
         return;
@@ -323,7 +363,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
 
     commitConversationState(conversationId);
-    void persistConversation(conversationId, session, runtime.visibleEventCount);
+    void persistGame();
   }
 
   function resetConversationDelivery(conversationId: string) {
@@ -338,11 +378,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return runtime;
   }
 
-  function clearConversationDeliveryTimer(
-    conversationId: string,
-    activeDelivery = deliveryRef.current
-  ) {
-    const runtime = activeDelivery[conversationId];
+  function clearConversationDeliveryTimer(conversationId: string) {
+    const runtime = deliveryRef.current[conversationId];
     if (!runtime?.timerId) {
       return;
     }
@@ -357,25 +394,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function runConversationPersistence(
-    conversationId: string,
-    task: () => Promise<void>,
-    errorMessage: string
-  ) {
-    const previousTask = persistenceQueueRef.current[conversationId] ?? Promise.resolve();
-    const nextTask = previousTask
+  async function runGamePersistence(task: () => Promise<void>, errorMessage: string) {
+    const nextTask = persistenceQueueRef.current
       .catch(() => {})
       .then(task)
       .catch((error: unknown) => {
         console.error(errorMessage, error);
       });
 
-    persistenceQueueRef.current[conversationId] = nextTask;
+    persistenceQueueRef.current = nextTask;
     await nextTask;
-
-    if (persistenceQueueRef.current[conversationId] === nextTask) {
-      delete persistenceQueueRef.current[conversationId];
-    }
   }
 }
 

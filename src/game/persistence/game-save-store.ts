@@ -1,7 +1,12 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { InkSessionSaveSnapshot } from '@/game/ink-session';
+import type {
+  ConversationSessionSaveSnapshot,
+  InkStorySaveSnapshot,
+} from '@/game/ink-session';
 import type { ConversationState, GameEvent, PendingChoice } from '@/game/types';
+
+const STORY_SAVE_ID = '__story__';
 
 type ConversationSaveRow = {
   conversation_id: string;
@@ -17,7 +22,7 @@ type GameEventRow = {
   payload_json: string;
 };
 
-export async function loadConversationSnapshots(db: SQLiteDatabase) {
+export async function loadGameSnapshot(db: SQLiteDatabase): Promise<InkStorySaveSnapshot | null> {
   const saveRows = await db.getAllAsync<ConversationSaveRow>(
     `
       SELECT
@@ -30,6 +35,10 @@ export async function loadConversationSnapshots(db: SQLiteDatabase) {
       FROM conversation_saves
     `
   );
+
+  if (saveRows.length === 0) {
+    return null;
+  }
 
   const eventRows = await db.getAllAsync<GameEventRow>(
     `
@@ -55,37 +64,46 @@ export async function loadConversationSnapshots(db: SQLiteDatabase) {
     eventsByConversation.set(row.conversation_id, [event]);
   }
 
-  const snapshots: Record<string, InkSessionSaveSnapshot> = {};
+  const storyRow = saveRows.find((row) => row.conversation_id === STORY_SAVE_ID);
+  const fallbackStoryRow = storyRow ?? saveRows.find((row) => row.ink_state_json);
+  const conversationsById: Record<string, ConversationSessionSaveSnapshot> = {};
+
   for (const row of saveRows) {
+    if (row.conversation_id === STORY_SAVE_ID) {
+      continue;
+    }
+
     const pendingChoices = parseJson<PendingChoice[]>(row.pending_choices_json);
     if (!isConversationStatus(row.status) || !pendingChoices) {
       continue;
     }
 
-    snapshots[row.conversation_id] = {
+    const events = eventsByConversation.get(row.conversation_id) ?? [];
+    conversationsById[row.conversation_id] = {
       status: row.status,
-      inkStateJson: row.ink_state_json ?? undefined,
-      sequence: row.event_sequence,
-      visibleEventCount: row.visible_event_count ?? (eventsByConversation.get(row.conversation_id)?.length ?? 0),
+      visibleEventCount: row.visible_event_count ?? events.length,
       pendingChoices,
-      events: eventsByConversation.get(row.conversation_id) ?? [],
+      events,
     };
   }
 
-  return snapshots;
+  return {
+    inkStateJson: fallbackStoryRow?.ink_state_json ?? undefined,
+    sequence: fallbackStoryRow?.event_sequence ?? 0,
+    conversationsById,
+  };
 }
 
-export async function saveConversationSnapshot(
-  db: SQLiteDatabase,
-  conversationId: string,
-  snapshot: InkSessionSaveSnapshot
-) {
-  if (snapshot.status === 'idle') {
-    await deleteConversationSnapshot(db, conversationId);
+export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySaveSnapshot) {
+  if (!snapshot.inkStateJson && isEveryConversationIdle(snapshot)) {
+    await deleteGameSnapshot(db);
     return;
   }
 
   await db.withExclusiveTransactionAsync(async (txn) => {
+    await txn.runAsync('DELETE FROM game_events');
+    await txn.runAsync('DELETE FROM conversation_saves');
+
     await txn.runAsync(
       `
         INSERT INTO conversation_saves (
@@ -98,51 +116,66 @@ export async function saveConversationSnapshot(
           updated_at
         )
         VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(conversation_id) DO UPDATE SET
-          status = excluded.status,
-          ink_state_json = excluded.ink_state_json,
-          event_sequence = excluded.event_sequence,
-          visible_event_count = excluded.visible_event_count,
-          pending_choices_json = excluded.pending_choices_json,
-          updated_at = excluded.updated_at
       `,
-      conversationId,
-      snapshot.status,
+      STORY_SAVE_ID,
+      getStoryStatus(snapshot),
       snapshot.inkStateJson ?? null,
       snapshot.sequence,
-      snapshot.visibleEventCount,
-      JSON.stringify(snapshot.pendingChoices),
+      0,
+      JSON.stringify([]),
       new Date().toISOString()
     );
 
-    await txn.runAsync('DELETE FROM game_events WHERE conversation_id = ?', conversationId);
-
-    for (const [index, event] of snapshot.events.entries()) {
+    for (const [conversationId, conversation] of Object.entries(snapshot.conversationsById)) {
       await txn.runAsync(
         `
-          INSERT INTO game_events (
-            event_id,
+          INSERT INTO conversation_saves (
             conversation_id,
-            event_type,
-            event_index,
-            payload_json
+            status,
+            ink_state_json,
+            event_sequence,
+            visible_event_count,
+            pending_choices_json,
+            updated_at
           )
-          VALUES (?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
-        event.id,
         conversationId,
-        event.type,
-        index,
-        JSON.stringify(event)
+        conversation.status,
+        null,
+        0,
+        conversation.visibleEventCount,
+        JSON.stringify(conversation.pendingChoices),
+        new Date().toISOString()
       );
+
+      for (const [index, event] of conversation.events.entries()) {
+        await txn.runAsync(
+          `
+            INSERT INTO game_events (
+              event_id,
+              conversation_id,
+              event_type,
+              event_index,
+              payload_json
+            )
+            VALUES (?, ?, ?, ?, ?)
+          `,
+          event.id,
+          conversationId,
+          event.type,
+          index,
+          JSON.stringify(event)
+        );
+      }
     }
   });
 }
 
-export async function deleteConversationSnapshot(db: SQLiteDatabase, conversationId: string) {
+export async function deleteGameSnapshot(db: SQLiteDatabase) {
   await db.withExclusiveTransactionAsync(async (txn) => {
-    await txn.runAsync('DELETE FROM game_events WHERE conversation_id = ?', conversationId);
-    await txn.runAsync('DELETE FROM conversation_saves WHERE conversation_id = ?', conversationId);
+    await txn.runAsync('DELETE FROM game_events');
+    await txn.runAsync('DELETE FROM conversation_saves');
   });
 }
 
@@ -156,4 +189,26 @@ function parseJson<T>(value: string) {
 
 function isConversationStatus(value: string): value is ConversationState['status'] {
   return value === 'idle' || value === 'active' || value === 'ended';
+}
+
+function getStoryStatus(snapshot: InkStorySaveSnapshot): ConversationState['status'] {
+  const conversations = Object.values(snapshot.conversationsById);
+  if (conversations.some((conversation) => conversation.status === 'active')) {
+    return 'active';
+  }
+
+  if (conversations.some((conversation) => conversation.status === 'ended')) {
+    return 'ended';
+  }
+
+  return 'idle';
+}
+
+function isEveryConversationIdle(snapshot: InkStorySaveSnapshot) {
+  return Object.values(snapshot.conversationsById).every(
+    (conversation) =>
+      conversation.status === 'idle' &&
+      conversation.events.length === 0 &&
+      conversation.pendingChoices.length === 0
+  );
 }
