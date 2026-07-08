@@ -14,6 +14,7 @@ export type InkSessionSaveSnapshot = {
   events: GameEvent[];
   pendingChoices: PendingChoice[];
   sequence: number;
+  visibleEventCount: number;
   inkStateJson?: string;
 };
 
@@ -65,6 +66,7 @@ export class InkConversationSession {
       status: this.status,
       events: [...this.events],
       pendingChoices: [...this.pendingChoices],
+      activeTyping: null,
     };
   }
 
@@ -74,6 +76,7 @@ export class InkConversationSession {
       events: [...this.events],
       pendingChoices: [...this.pendingChoices],
       sequence: this.sequence,
+      visibleEventCount: this.events.length,
       inkStateJson: this.status === 'idle' ? undefined : this.story.state.ToJson(),
     };
   }
@@ -182,27 +185,17 @@ function toEvents({
   const normalizedText = stripSpeakerPrefix(rawText, speakerId);
   const delayMs = toNumber(tags.delay);
 
-  const events: GameEvent[] = [];
-  if (delayMs && speakerId !== 'player') {
-    events.push({
-      type: 'typing',
-      id: nextId(),
+  return [
+    {
+      type: 'message',
+      id: tags.id ?? nextId(),
+      conversationId: tags.conversation ?? conversationId,
       speakerId,
-      durationMs: delayMs,
-    });
-  }
-
-  events.push({
-    type: 'message',
-    id: tags.id ?? nextId(),
-    conversationId: tags.conversation ?? conversationId,
-    speakerId,
-    direction: toMessageDirection(speakerId),
-    text: normalizedText,
-    delayMs,
-  });
-
-  return events;
+      direction: toMessageDirection(speakerId),
+      text: normalizedText,
+      delayMs,
+    },
+  ];
 }
 
 function parseTags(tags: string[]): ParsedTags {

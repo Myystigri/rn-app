@@ -178,4 +178,4 @@ Linting is configured through:
 - The messaging UI is the primary product surface.
 - `inkjs/full` is required for runtime compilation.
 - Do not render raw Ink output directly in components.
-- SQLite persistence is expected next, but the current implementation is intentionally in-memory.
+- SQLite persistence was added recently

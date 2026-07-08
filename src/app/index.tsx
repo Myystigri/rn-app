@@ -16,13 +16,25 @@ export default function InboxScreen() {
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            MYYST
-          </ThemedText>
-          <ThemedText type="subtitle">Messages</ThemedText>
-          <ThemedText themeColor="textSecondary">
-            One barebones thread wired to Ink.
-          </ThemedText>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerCopy}>
+              <ThemedText type="smallBold" themeColor="textSecondary">
+                MYYST
+              </ThemedText>
+              <ThemedText type="subtitle">Messages</ThemedText>
+              <ThemedText themeColor="textSecondary">
+                One barebones thread wired to Ink.
+              </ThemedText>
+            </View>
+
+            <Link href={'/settings' as Href} asChild>
+              <Pressable style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}>
+                <ThemedView type="backgroundElement" style={styles.settingsButtonSurface}>
+                  <ThemedText type="smallBold">Settings</ThemedText>
+                </ThemedView>
+              </Pressable>
+            </Link>
+          </View>
         </View>
 
         <ScrollView
@@ -84,7 +96,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.two,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  headerCopy: {
+    flex: 1,
     gap: Spacing.one,
+  },
+  settingsButton: {
+    borderRadius: 14,
+  },
+  settingsButtonSurface: {
+    borderRadius: 14,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   scrollView: {
     flex: 1,

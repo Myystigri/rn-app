@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { MessageEvent } from '@/game/types';
-import { useGame } from '@/game/game-provider';
+import { toDisplayName, useGame } from '@/game/game-provider';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ConversationScreen() {
@@ -19,7 +19,7 @@ export default function ConversationScreen() {
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
-  }, [conversation?.events.length, conversation?.pendingChoices.length]);
+  }, [conversation?.events.length, conversation?.pendingChoices.length, conversation?.activeTyping?.id]);
 
   if (!conversation) {
     return (
@@ -64,6 +64,10 @@ export default function ConversationScreen() {
               />
             ))
           )}
+
+          {conversation.activeTyping ? (
+            <TypingBubble speakerId={conversation.activeTyping.speakerId} />
+          ) : null}
         </ScrollView>
 
         <View style={styles.footer}>
@@ -100,6 +104,19 @@ export default function ConversationScreen() {
   );
 }
 
+function TypingBubble({ speakerId }: { speakerId: string }) {
+  return (
+    <View style={styles.bubbleRow}>
+      <ThemedView type="backgroundElement" style={[styles.bubble, styles.typingBubble]}>
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.speakerLabel}>
+          {toDisplayName(speakerId)}
+        </ThemedText>
+        <ThemedText themeColor="textSecondary">Typing...</ThemedText>
+      </ThemedView>
+    </View>
+  );
+}
+
 function MessageBubble({
   event,
   isPlayer,
@@ -118,7 +135,7 @@ function MessageBubble({
           type="smallBold"
           themeColor="textSecondary"
           style={[styles.speakerLabel, isPlayer && { color: accentColor }]}>
-          {isPlayer ? 'You' : event.speakerId}
+          {isPlayer ? 'You' : toDisplayName(event.speakerId)}
         </ThemedText>
         <ThemedText>{event.text}</ThemedText>
       </ThemedView>
@@ -185,6 +202,9 @@ const styles = StyleSheet.create({
   },
   bubblePlayer: {
     borderBottomRightRadius: 6,
+  },
+  typingBubble: {
+    minWidth: 120,
   },
   speakerLabel: {
     textTransform: 'capitalize',

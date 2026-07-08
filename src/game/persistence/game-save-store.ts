@@ -8,6 +8,7 @@ type ConversationSaveRow = {
   status: ConversationState['status'];
   ink_state_json: string | null;
   event_sequence: number;
+  visible_event_count: number | null;
   pending_choices_json: string;
 };
 
@@ -24,6 +25,7 @@ export async function loadConversationSnapshots(db: SQLiteDatabase) {
         status,
         ink_state_json,
         event_sequence,
+        visible_event_count,
         pending_choices_json
       FROM conversation_saves
     `
@@ -64,6 +66,7 @@ export async function loadConversationSnapshots(db: SQLiteDatabase) {
       status: row.status,
       inkStateJson: row.ink_state_json ?? undefined,
       sequence: row.event_sequence,
+      visibleEventCount: row.visible_event_count ?? (eventsByConversation.get(row.conversation_id)?.length ?? 0),
       pendingChoices,
       events: eventsByConversation.get(row.conversation_id) ?? [],
     };
@@ -82,22 +85,24 @@ export async function saveConversationSnapshot(
     return;
   }
 
-  await db.withExclusiveTransactionAsync(async () => {
-    await db.runAsync(
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    await txn.runAsync(
       `
         INSERT INTO conversation_saves (
           conversation_id,
           status,
           ink_state_json,
           event_sequence,
+          visible_event_count,
           pending_choices_json,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(conversation_id) DO UPDATE SET
           status = excluded.status,
           ink_state_json = excluded.ink_state_json,
           event_sequence = excluded.event_sequence,
+          visible_event_count = excluded.visible_event_count,
           pending_choices_json = excluded.pending_choices_json,
           updated_at = excluded.updated_at
       `,
@@ -105,14 +110,15 @@ export async function saveConversationSnapshot(
       snapshot.status,
       snapshot.inkStateJson ?? null,
       snapshot.sequence,
+      snapshot.visibleEventCount,
       JSON.stringify(snapshot.pendingChoices),
       new Date().toISOString()
     );
 
-    await db.runAsync('DELETE FROM game_events WHERE conversation_id = ?', conversationId);
+    await txn.runAsync('DELETE FROM game_events WHERE conversation_id = ?', conversationId);
 
     for (const [index, event] of snapshot.events.entries()) {
-      await db.runAsync(
+      await txn.runAsync(
         `
           INSERT INTO game_events (
             event_id,
@@ -134,9 +140,9 @@ export async function saveConversationSnapshot(
 }
 
 export async function deleteConversationSnapshot(db: SQLiteDatabase, conversationId: string) {
-  await db.withExclusiveTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM game_events WHERE conversation_id = ?', conversationId);
-    await db.runAsync('DELETE FROM conversation_saves WHERE conversation_id = ?', conversationId);
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    await txn.runAsync('DELETE FROM game_events WHERE conversation_id = ?', conversationId);
+    await txn.runAsync('DELETE FROM conversation_saves WHERE conversation_id = ?', conversationId);
   });
 }
 

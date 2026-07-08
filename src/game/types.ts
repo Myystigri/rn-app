@@ -1,5 +1,7 @@
 export type MessageDirection = 'incoming' | 'outgoing' | 'system';
 
+export type DelayProfileId = 'fast' | 'normal' | 'slow';
+
 export type PendingChoice = {
   id: number;
   text: string;
@@ -71,4 +73,10 @@ export type ConversationState = {
   status: 'idle' | 'active' | 'ended';
   events: GameEvent[];
   pendingChoices: PendingChoice[];
+  activeTyping: TypingEvent | null;
+};
+
+export type GameSettings = {
+  incomingMessageDelayEnabled: boolean;
+  incomingMessageDelayProfile: DelayProfileId;
 };
