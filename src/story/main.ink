@@ -1,5 +1,9 @@
 === maya_introduction ===
 
+// Message images use paths relative to assets/story-images, for example:
+// # image:maya/apartment-door.jpg
+// Use {""} immediately after the tags for an image-only message.
+
 # id:intro.maya.001
 # speaker:maya
 # conversation:maya
@@ -10,6 +14,12 @@ Are you there?
     # speaker:player
     # conversation:maya
     Yeah. What's going on?
+
+    # id:intro.maya.0012
+    # speaker:maya
+    # image:img.png
+    # conversation:maya
+    {""}
 
     # id:intro.maya.002
     # speaker:maya

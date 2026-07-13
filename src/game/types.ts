@@ -16,6 +16,7 @@ export type MessageEvent = {
   speakerId: string;
   direction: MessageDirection;
   text: string;
+  imagePath?: string;
   delayMs?: number;
 };
 

@@ -308,7 +308,9 @@ function toEvents({
     ];
   }
 
-  if (!rawText) {
+  const imagePath = tags.image || undefined;
+
+  if (!rawText && !imagePath) {
     return [];
   }
 
@@ -324,6 +326,7 @@ function toEvents({
       speakerId,
       direction: toMessageDirection(speakerId),
       text: normalizedText,
+      imagePath,
       delayMs,
     },
   ];

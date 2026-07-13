@@ -1,4 +1,5 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { buildConversationDisplayItems, ConversationDisplayItem } from '@/game/side-effects';
+import { resolveStoryImage } from '@/game/story-images';
 import { MessageEvent } from '@/game/types';
 import { toDisplayName, useGame } from '@/game/game-provider';
 import { useTheme } from '@/hooks/use-theme';
@@ -160,6 +162,8 @@ function MessageBubble({
   isPlayer: boolean;
   accentColor: string;
 }) {
+  const imageSource = event.imagePath ? resolveStoryImage(event.imagePath) : undefined;
+
   return (
     <View style={[styles.bubbleRow, isPlayer && styles.bubbleRowPlayer]}>
       <ThemedView
@@ -171,7 +175,8 @@ function MessageBubble({
           style={[styles.speakerLabel, isPlayer && { color: accentColor }]}>
           {isPlayer ? 'You' : toDisplayName(event.speakerId)}
         </ThemedText>
-        <ThemedText>{event.text}</ThemedText>
+        {imageSource ? <Image source={imageSource} contentFit="cover" style={styles.messageImage} /> : null}
+        {event.text ? <ThemedText>{event.text}</ThemedText> : null}
       </ThemedView>
     </View>
   );
@@ -236,6 +241,12 @@ const styles = StyleSheet.create({
   },
   bubblePlayer: {
     borderBottomRightRadius: 6,
+  },
+  messageImage: {
+    width: 232,
+    maxWidth: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 8,
   },
   typingBubble: {
     minWidth: 120,
