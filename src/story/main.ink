@@ -3,7 +3,6 @@
 # id:intro.maya.001
 # speaker:maya
 # conversation:maya
-# delay:800
 Are you there?
 
 * [Yeah. What's going on?]
@@ -15,7 +14,6 @@ Are you there?
     # id:intro.maya.002
     # speaker:maya
     # conversation:maya
-    # delay:1400
     I think someone is inside my apartment.
 
     -> maya_apartment_warning
@@ -34,7 +32,6 @@ Are you there?
     # id:intro.maya.004
     # speaker:maya
     # conversation:maya
-    # delay:1000
     I do not have time for this.
 
     -> maya_apartment_warning
@@ -44,7 +41,6 @@ Are you there?
 # id:intro.maya.005
 # speaker:maya
 # conversation:maya
-# delay:1200
 I am serious. The front door just moved.
 
 * [Call the police.]
@@ -78,13 +74,11 @@ I am serious. The front door just moved.
 # id:intro.maya.008
 # speaker:maya
 # conversation:maya
-# delay:1000
 Okay. Bathroom door is locked.
 
 # id:intro.maya.009
 # speaker:maya
 # conversation:maya
-# delay:1400
 I can hear footsteps in the hall.
 
 # id:intro.maya.010
