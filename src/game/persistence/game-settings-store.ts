@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { defaultGameSettings, isDelayProfileId } from '@/game/settings';
 import { GameSettings } from '@/game/types';
+import { withGameTransaction } from '@/game/persistence/transaction';
 
 type AppSettingRow = {
   setting_key: string;
@@ -36,9 +37,19 @@ export async function loadGameSettings(db: SQLiteDatabase): Promise<GameSettings
 export async function saveGameSettings(db: SQLiteDatabase, settings: GameSettings) {
   const updatedAt = new Date().toISOString();
 
-  await db.withExclusiveTransactionAsync(async () => {
-    await upsertSetting(db, 'incomingMessageDelayEnabled', settings.incomingMessageDelayEnabled, updatedAt);
-    await upsertSetting(db, 'incomingMessageDelayProfile', settings.incomingMessageDelayProfile, updatedAt);
+  await withGameTransaction(db, async (txn) => {
+    await upsertSetting(
+      txn,
+      'incomingMessageDelayEnabled',
+      settings.incomingMessageDelayEnabled,
+      updatedAt
+    );
+    await upsertSetting(
+      txn,
+      'incomingMessageDelayProfile',
+      settings.incomingMessageDelayProfile,
+      updatedAt
+    );
   });
 }
 

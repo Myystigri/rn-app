@@ -216,6 +216,7 @@ Native mobile is the primary target for SQLite. Expo SQLite web support is less 
 - Do not make screen components parse raw Ink tags.
 - Avoid building more UI around starter/demo screens; replace them with in-world phone surfaces.
 - Keep the story structure as one canonical Ink story project with app conversation IDs mapped to Ink entry points.
+- Do NOT try and start the project, this is not possible from your sandbox
 
 # Verification
 

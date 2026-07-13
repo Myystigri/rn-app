@@ -5,6 +5,7 @@ import type {
   InkStorySaveSnapshot,
 } from '@/game/ink-session';
 import type { ConversationState, GameEvent, PendingChoice } from '@/game/types';
+import { withGameTransaction } from '@/game/persistence/transaction';
 
 const STORY_SAVE_ID = '__story__';
 
@@ -117,7 +118,7 @@ export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySav
     return;
   }
 
-  await db.withExclusiveTransactionAsync(async (txn) => {
+  await withGameTransaction(db, async (txn) => {
     await txn.runAsync('DELETE FROM game_events');
     await txn.runAsync('DELETE FROM conversation_saves');
 
@@ -210,7 +211,7 @@ export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySav
 }
 
 export async function deleteGameSnapshot(db: SQLiteDatabase) {
-  await db.withExclusiveTransactionAsync(async (txn) => {
+  await withGameTransaction(db, async (txn) => {
     await txn.runAsync('DELETE FROM game_events');
     await txn.runAsync('DELETE FROM conversation_saves');
   });
