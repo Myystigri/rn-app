@@ -135,11 +135,11 @@ export class InkStorySession {
   private advance(defaultConversationId: string, sceneId = defaultConversationId) {
     while (this.story.canContinue) {
       const rawText = (this.story.Continue() ?? '').trim();
-      const tags = parseTags(this.story.currentTags ?? []);
+      const tagGroups = parseTags(this.story.currentTags ?? []);
       const events = toEvents({
         conversationId: defaultConversationId,
         rawText,
-        tags,
+        tagGroups,
         nextId: () => this.nextGeneratedId(),
       });
 
@@ -276,6 +276,20 @@ function getEventConversationId(event: GameEvent, defaultConversationId: string)
 function toEvents({
   conversationId,
   rawText,
+  tagGroups,
+  nextId,
+}: {
+  conversationId: string;
+  rawText: string;
+  tagGroups: ParsedTags[];
+  nextId: () => string;
+}): GameEvent[] {
+  return tagGroups.flatMap((tags) => toEventsForTagGroup({ conversationId, rawText, tags, nextId }));
+}
+
+function toEventsForTagGroup({
+  conversationId,
+  rawText,
   tags,
   nextId,
 }: {
@@ -332,20 +346,26 @@ function toEvents({
   ];
 }
 
-function parseTags(tags: string[]): ParsedTags {
-  return tags.reduce<ParsedTags>((result, tag) => {
-    const separatorIndex = tag.indexOf(':');
+function parseTags(tags: string[]): ParsedTags[] {
+  const tagGroups: ParsedTags[] = [{}];
 
-    if (separatorIndex === -1) {
-      result[tag.trim()] = 'true';
-      return result;
+  for (const tag of tags) {
+    const separatorIndex = tag.indexOf(':');
+    const key = separatorIndex === -1 ? tag.trim() : tag.slice(0, separatorIndex).trim();
+    const value = separatorIndex === -1 ? 'true' : tag.slice(separatorIndex + 1).trim();
+    let currentGroup = tagGroups[tagGroups.length - 1];
+
+    // Ink can emit several tagged side effects in one Continue call. A new type tag starts
+    // the next event while preserving the tags that belong to each prior event.
+    if (key === 'type' && currentGroup.type) {
+      currentGroup = {};
+      tagGroups.push(currentGroup);
     }
 
-    const key = tag.slice(0, separatorIndex).trim();
-    const value = tag.slice(separatorIndex + 1).trim();
-    result[key] = value;
-    return result;
-  }, {});
+    currentGroup[key] = value;
+  }
+
+  return tagGroups.filter((tagGroup) => Object.keys(tagGroup).length > 0);
 }
 
 function normalizeSpeakerId(speakerId: string | undefined) {
