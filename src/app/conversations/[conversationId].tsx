@@ -50,16 +50,24 @@ export default function ConversationScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <Stack.Screen options={{ title: conversation.title }} />
+      <Stack.Screen
+        options={{
+          title: conversation.title,
+          headerTitle: () => (
+            <Link href={`/conversations/${conversation.id}/contact` as Href} asChild>
+              <Pressable
+                accessibilityLabel={`Open details for ${conversation.title}`}
+                accessibilityRole="link"
+                style={({ pressed }) => pressed && styles.pressed}>
+                <ThemedText type="default" numberOfLines={1}>
+                  {conversation.title}
+                </ThemedText>
+              </Pressable>
+            </Link>
+          ),
+        }}
+      />
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-        <Link href={`/conversations/${conversation.id}/contact` as Href} asChild>
-          <Pressable style={({ pressed }) => [styles.contactHeader, pressed && styles.pressed]}>
-            <ThemedText type="smallBold">{conversation.title}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Contact details
-            </ThemedText>
-          </Pressable>
-        </Link>
         <ScrollView
           ref={scrollViewRef}
           style={styles.scrollView}
@@ -233,14 +241,6 @@ const styles = StyleSheet.create({
     minHeight: 240,
     gap: Spacing.one,
     paddingHorizontal: Spacing.four,
-  },
-  contactHeader: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
-    gap: Spacing.half,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#9095A133',
   },
   emptyText: {
     textAlign: 'center',
