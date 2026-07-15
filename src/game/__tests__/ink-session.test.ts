@@ -91,6 +91,13 @@ describe('InkStorySession', () => {
         expect.objectContaining({ type: 'scene-ended', sceneId: 'maya_introduction' }),
       ])
     );
+
+    expect(session.conversationSnapshot('bob')).toMatchObject({
+      status: 'active',
+      events: [
+        { type: 'message', id: 'intro.unknown.001', conversationId: 'bob', speakerId: 'bob' },
+      ],
+    });
   });
 
   it('rejects an incompatible saved story version', () => {

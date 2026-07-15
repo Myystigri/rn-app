@@ -40,6 +40,12 @@ export type UnlockAppEvent = {
   appId: string;
 };
 
+export type UnlockConversationEvent = {
+  type: 'unlock-conversation';
+  id: string;
+  conversationId: string;
+};
+
 export type TypingEvent = {
   type: 'typing';
   id: string;
@@ -58,6 +64,7 @@ export type GameEvent =
   | ChoicesEvent
   | NotificationEvent
   | UnlockAppEvent
+  | UnlockConversationEvent
   | TypingEvent
   | SceneEndedEvent;
 
@@ -73,6 +80,7 @@ export type ConversationDefinition = {
   id: string;
   title: string;
   startSceneId: string;
+  unlockedByDefault?: boolean;
 };
 
 export type PersistedDeliveryState = {
@@ -111,7 +119,7 @@ export type PhoneAppState = PhoneAppDefinition & {
 
 export type ConversationTimelineEntry = {
   id: string;
-  eventType: 'notification' | 'unlock-app' | 'scene-ended';
+  eventType: 'notification' | 'unlock-app' | 'unlock-conversation' | 'scene-ended';
   title: string;
   detail?: string;
 };
@@ -119,5 +127,6 @@ export type ConversationTimelineEntry = {
 export type GameSideEffectsState = {
   notifications: NotificationEvent[];
   unlockedAppIds: string[];
+  unlockedConversationIds: string[];
   timelineByConversationId: Record<string, ConversationTimelineEntry[]>;
 };

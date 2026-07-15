@@ -27,6 +27,11 @@ const maya: ConversationState = {
       appId: 'case-files',
     },
     {
+      type: 'unlock-conversation',
+      id: 'unlock.bob',
+      conversationId: 'bob',
+    },
+    {
       type: 'notification',
       id: 'notification.case-files',
       appId: 'case-files',
@@ -57,8 +62,10 @@ describe('side-effect projections', () => {
 
     expect(sideEffects.notifications).toHaveLength(1);
     expect(sideEffects.unlockedAppIds).toEqual(['case-files']);
+    expect(sideEffects.unlockedConversationIds).toEqual(['bob']);
     expect(sideEffects.timelineByConversationId.maya).toEqual([
       { id: 'unlock.case-files', eventType: 'unlock-app', title: 'Unlocked Case Files' },
+      { id: 'unlock.bob', eventType: 'unlock-conversation', title: 'New conversation unlocked' },
       {
         id: 'notification.case-files',
         eventType: 'notification',
@@ -79,6 +86,7 @@ describe('side-effect projections', () => {
     expect(buildConversationDisplayItems(maya, sideEffects.timelineByConversationId.maya)).toEqual([
       { id: 'message.1', type: 'message', event: maya.events[0] },
       { id: 'unlock.case-files', type: 'meta', eventType: 'unlock-app', title: 'Unlocked Case Files' },
+      { id: 'unlock.bob', type: 'meta', eventType: 'unlock-conversation', title: 'New conversation unlocked' },
       {
         id: 'notification.case-files',
         type: 'meta',

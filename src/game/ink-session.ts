@@ -322,6 +322,16 @@ function toEventsForTagGroup({
     ];
   }
 
+  if (tagType === 'unlock-conversation' && tags.conversation) {
+    return [
+      {
+        type: 'unlock-conversation',
+        id: tags.id ?? nextId(),
+        conversationId: tags.conversation,
+      },
+    ];
+  }
+
   const imagePath = tags.image || undefined;
 
   if (!rawText && !imagePath) {
@@ -357,7 +367,7 @@ function parseTags(tags: string[]): ParsedTags[] {
 
     // Ink can emit several tagged side effects in one Continue call. A new type tag starts
     // the next event while preserving the tags that belong to each prior event.
-    if (key === 'type' && currentGroup.type) {
+    if ((key === 'type' && currentGroup.type) || (key === 'id' && currentGroup.id)) {
       currentGroup = {};
       tagGroups.push(currentGroup);
     }

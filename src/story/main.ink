@@ -91,6 +91,15 @@ Okay. Bathroom door is locked.
 # conversation:maya
 I can hear footsteps in the hall.
 
+# type:unlock-conversation
+# id:intro.unlock.bob
+# conversation:bob
+
+# id:intro.unknown.001
+# speaker:bob
+# conversation:bob
+Hi buddy.
+
 # id:intro.maya.010
 # speaker:maya
 # conversation:maya
@@ -105,5 +114,14 @@ Stay here. I am going to keep texting.
 # app:case-files
 # title:Case Files unlocked
 # body:Maya synced a new surface to your phone.
+
+-> END
+
+=== bob_introduction ===
+
+# id:bob.intro.001
+# speaker:bob
+# conversation:bob
+Hi buddy.
 
 -> END

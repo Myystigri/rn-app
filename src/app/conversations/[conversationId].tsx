@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Href, Link, Stack, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -52,6 +52,14 @@ export default function ConversationScreen() {
     <ThemedView style={styles.screen}>
       <Stack.Screen options={{ title: conversation.title }} />
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <Link href={`/conversations/${conversation.id}/contact` as Href} asChild>
+          <Pressable style={({ pressed }) => [styles.contactHeader, pressed && styles.pressed]}>
+            <ThemedText type="smallBold">{conversation.title}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Contact details
+            </ThemedText>
+          </Pressable>
+        </Link>
         <ScrollView
           ref={scrollViewRef}
           style={styles.scrollView}
@@ -150,6 +158,10 @@ function toMetaLabel(eventType: Extract<ConversationDisplayItem, { type: 'meta' 
     return 'Unlocked';
   }
 
+  if (eventType === 'unlock-conversation') {
+    return 'New conversation';
+  }
+
   return 'Status';
 }
 
@@ -221,6 +233,14 @@ const styles = StyleSheet.create({
     minHeight: 240,
     gap: Spacing.one,
     paddingHorizontal: Spacing.four,
+  },
+  contactHeader: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.half,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#9095A133',
   },
   emptyText: {
     textAlign: 'center',

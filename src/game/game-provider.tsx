@@ -24,6 +24,7 @@ import {
 } from '@/game/delivery';
 import { InkStorySession } from '@/game/ink-session';
 import { loadGameSettings, saveGameSettings } from '@/game/persistence/game-settings-store';
+import { loadContactNames, saveContactNames } from '@/game/persistence/contact-store';
 import {
   deleteGameSnapshot,
   loadGameSnapshot,
@@ -54,6 +55,7 @@ type GameContextValue = {
   choose: (conversationId: string, choiceId: number) => Promise<void>;
   restartConversation: (conversationId: string) => Promise<void>;
   updateSettings: (nextSettings: Partial<GameSettings>) => Promise<void>;
+  renameConversation: (conversationId: string, title: string) => Promise<void>;
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -97,6 +99,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<GameSettings>(defaultGameSettings);
   const [isHydrated, setIsHydrated] = useState(false);
   const settingsRef = useRef<GameSettings>(defaultGameSettings);
+  const contactNamesRef = useRef<Record<string, string>>({});
   const apps = buildPhoneApps(phoneAppDefinitions, sideEffects);
 
   useEffect(() => {
@@ -125,10 +128,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       let nextConversationsById = createInitialConversationState();
 
       try {
-        const [snapshot, savedSettings] = await Promise.all([
+        const [snapshot, savedSettings, savedContactNames] = await Promise.all([
           loadGameSnapshot(db),
           loadGameSettings(db),
+          loadContactNames(db),
         ]);
+        contactNamesRef.current = savedContactNames;
 
         if (snapshot) {
           try {
@@ -154,10 +159,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
                 conversationSnapshot,
                 savedSettings
               );
-              nextConversationsById[definition.id] = buildConversationState(
+              nextConversationsById[definition.id] = applyContactTitle(buildConversationState(
                 conversationSnapshot,
                 nextDelivery[definition.id]
-              );
+              ), savedContactNames[definition.id]);
             }
           } catch (error) {
             console.error('Failed to restore shared Ink story state', error);
@@ -181,7 +186,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       storySessionRef.current = nextStorySession;
       deliveryRef.current = nextDelivery;
-      setConversationsById(nextConversationsById);
+      setConversationsById(applyContactTitles(nextConversationsById, contactNamesRef.current));
       setSideEffects(reduceGameSideEffects(nextConversationsById, phoneAppDefinitionById));
       setIsHydrated(true);
       flushAllConversationDeliveryRef.current();
@@ -279,6 +284,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     flushAllConversationDelivery();
   }
 
+  async function renameConversation(conversationId: string, title: string) {
+    if (!conversationDefinitionById[conversationId]) {
+      return;
+    }
+
+    const trimmedTitle = title.trim();
+    const nextContactNames = { ...contactNamesRef.current };
+    if (trimmedTitle) {
+      nextContactNames[conversationId] = trimmedTitle;
+    } else {
+      delete nextContactNames[conversationId];
+    }
+
+    contactNamesRef.current = nextContactNames;
+    setConversationsById((current) => applyContactTitles(current, nextContactNames));
+    await saveContactNames(db, nextContactNames);
+  }
+
   function commitAllConversationStates(session = storySessionRef.current) {
     if (!session) {
       return;
@@ -294,7 +317,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         continue;
       }
 
-      nextConversationsById[definition.id] = buildConversationState(sessionState, runtime);
+      nextConversationsById[definition.id] = applyContactTitle(
+        buildConversationState(sessionState, runtime),
+        contactNamesRef.current[definition.id]
+      );
     }
 
     setConversationsById(nextConversationsById);
@@ -330,7 +356,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   return (
     <GameContext.Provider
       value={{
-        conversations: conversationDefinitions.map((definition) => conversationsById[definition.id]),
+        conversations: conversationDefinitions
+          .filter((definition) => isConversationUnlocked(definition.id, sideEffects.unlockedConversationIds))
+          .map((definition) => conversationsById[definition.id]),
         conversationsById,
         apps,
         notifications: sideEffects.notifications,
@@ -340,6 +368,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         choose,
         restartConversation,
         updateSettings,
+        renameConversation,
       }}>
       {children}
     </GameContext.Provider>
@@ -446,6 +475,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     persistenceQueueRef.current = nextTask;
     await nextTask;
   }
+}
+
+function applyContactTitle(conversation: ConversationState, customTitle?: string) {
+  return customTitle ? { ...conversation, title: customTitle } : conversation;
+}
+
+function applyContactTitles(
+  conversations: Record<string, ConversationState>,
+  names: Record<string, string>
+) {
+  return Object.fromEntries(
+    Object.entries(conversations).map(([id, conversation]) => [id, applyContactTitle(conversation, names[id])])
+  ) as Record<string, ConversationState>;
+}
+
+function isConversationUnlocked(conversationId: string, unlockedConversationIds: string[]) {
+  const definition = conversationDefinitionById[conversationId];
+  return Boolean(definition?.unlockedByDefault || unlockedConversationIds.includes(conversationId));
 }
 
 export function useGame() {

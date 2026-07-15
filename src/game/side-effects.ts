@@ -26,6 +26,7 @@ export function createInitialSideEffectsState(): GameSideEffectsState {
   return {
     notifications: [],
     unlockedAppIds: [],
+    unlockedConversationIds: [],
     timelineByConversationId: {},
   };
 }
@@ -36,6 +37,7 @@ export function reduceGameSideEffects(
 ): GameSideEffectsState {
   const notifications: NotificationEvent[] = [];
   const unlockedAppIds = new Set<string>();
+  const unlockedConversationIds = new Set<string>();
   const seenNotificationIds = new Set<string>();
   const timelineByConversationId: Record<string, ConversationTimelineEntry[]> = {};
 
@@ -68,6 +70,16 @@ export function reduceGameSideEffects(
         continue;
       }
 
+      if (event.type === 'unlock-conversation') {
+        unlockedConversationIds.add(event.conversationId);
+        timeline.push({
+          id: event.id,
+          eventType: 'unlock-conversation',
+          title: 'New conversation unlocked',
+        });
+        continue;
+      }
+
       if (event.type === 'scene-ended') {
         timeline.push({
           id: event.id,
@@ -83,6 +95,7 @@ export function reduceGameSideEffects(
   return {
     notifications,
     unlockedAppIds: [...unlockedAppIds],
+    unlockedConversationIds: [...unlockedConversationIds],
     timelineByConversationId,
   };
 }

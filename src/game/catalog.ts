@@ -13,6 +13,13 @@ export const conversationDefinitions: ConversationDefinition[] = [
     id: 'maya',
     title: 'Maya',
     startSceneId: 'maya_introduction',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'bob',
+    title: 'unknown',
+    startSceneId: 'bob_introduction',
+    unlockedByDefault: false,
   },
 ];
 
