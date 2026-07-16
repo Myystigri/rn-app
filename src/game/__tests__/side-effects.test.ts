@@ -80,21 +80,9 @@ describe('side-effect projections', () => {
     expect(apps.find((app) => app.id === 'notifications')).toMatchObject({ badgeCount: 1 });
   });
 
-  it('keeps message and timeline entries in story order for rendering', () => {
-    const sideEffects = reduceGameSideEffects({ maya }, phoneAppDefinitionById);
-
-    expect(buildConversationDisplayItems(maya, sideEffects.timelineByConversationId.maya)).toEqual([
+  it('renders messages without exposing metadata events in the conversation', () => {
+    expect(buildConversationDisplayItems(maya)).toEqual([
       { id: 'message.1', type: 'message', event: maya.events[0] },
-      { id: 'unlock.case-files', type: 'meta', eventType: 'unlock-app', title: 'Unlocked Case Files' },
-      { id: 'unlock.bob', type: 'meta', eventType: 'unlock-conversation', title: 'New conversation unlocked' },
-      {
-        id: 'notification.case-files',
-        type: 'meta',
-        eventType: 'notification',
-        title: 'Case Files unlocked',
-        detail: 'New material is available.',
-      },
-      { id: 'scene.ended', type: 'meta', eventType: 'scene-ended', title: 'Scene ended' },
     ]);
   });
 });

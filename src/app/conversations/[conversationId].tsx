@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { buildConversationDisplayItems, ConversationDisplayItem } from '@/game/side-effects';
+import { buildConversationDisplayItems } from '@/game/side-effects';
 import { resolveStoryImage } from '@/game/story-images';
 import { MessageEvent } from '@/game/types';
 import { toDisplayName, useGame } from '@/game/game-provider';
@@ -19,7 +19,6 @@ export default function ConversationScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const {
     conversationsById,
-    conversationTimelineById,
     startConversation,
     choose,
     restartConversation,
@@ -43,10 +42,7 @@ export default function ConversationScreen() {
     );
   }
 
-  const displayItems = buildConversationDisplayItems(
-    conversation,
-    conversationTimelineById[conversation.id] ?? []
-  );
+  const displayItems = buildConversationDisplayItems(conversation);
 
   return (
     <ThemedView style={styles.screen}>
@@ -81,18 +77,14 @@ export default function ConversationScreen() {
               </ThemedText>
             </View>
           ) : (
-            displayItems.map((item) =>
-              item.type === 'message' ? (
-                <MessageBubble
-                  key={item.id}
-                  event={item.event}
-                  isPlayer={item.event.direction === 'outgoing'}
-                  accentColor={theme.text}
-                />
-              ) : (
-                <TimelineMarker key={item.id} item={item} />
-              )
-            )
+            displayItems.map((item) => (
+              <MessageBubble
+                key={item.id}
+                event={item.event}
+                isPlayer={item.event.direction === 'outgoing'}
+                accentColor={theme.text}
+              />
+            ))
           )}
 
           {conversation.activeTyping ? (
@@ -126,24 +118,6 @@ export default function ConversationScreen() {
   );
 }
 
-function TimelineMarker({ item }: { item: Extract<ConversationDisplayItem, { type: 'meta' }> }) {
-  return (
-    <View style={styles.metaRow}>
-      <ThemedView type="backgroundElement" style={styles.metaSurface}>
-        <ThemedText type="smallBold" themeColor="textSecondary">
-          {toMetaLabel(item.eventType)}
-        </ThemedText>
-        <ThemedText>{item.title}</ThemedText>
-        {item.detail ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {item.detail}
-          </ThemedText>
-        ) : null}
-      </ThemedView>
-    </View>
-  );
-}
-
 function TypingBubble({ speakerId }: { speakerId: string }) {
   return (
     <View style={styles.bubbleRow}>
@@ -155,22 +129,6 @@ function TypingBubble({ speakerId }: { speakerId: string }) {
       </ThemedView>
     </View>
   );
-}
-
-function toMetaLabel(eventType: Extract<ConversationDisplayItem, { type: 'meta' }>['eventType']) {
-  if (eventType === 'notification') {
-    return 'Notification';
-  }
-
-  if (eventType === 'unlock-app') {
-    return 'Unlocked';
-  }
-
-  if (eventType === 'unlock-conversation') {
-    return 'New conversation';
-  }
-
-  return 'Status';
 }
 
 function MessageBubble({
@@ -270,17 +228,6 @@ const styles = StyleSheet.create({
   },
   typingBubble: {
     minWidth: 120,
-  },
-  metaRow: {
-    alignItems: 'center',
-  },
-  metaSurface: {
-    maxWidth: '92%',
-    borderRadius: 12,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
-    gap: Spacing.half,
   },
   speakerLabel: {
     textTransform: 'capitalize',

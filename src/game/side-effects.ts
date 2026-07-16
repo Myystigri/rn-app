@@ -13,13 +13,6 @@ export type ConversationDisplayItem =
       id: string;
       type: 'message';
       event: MessageEvent;
-    }
-  | {
-      id: string;
-      type: 'meta';
-      eventType: ConversationTimelineEntry['eventType'];
-      title: string;
-      detail?: string;
     };
 
 export function createInitialSideEffectsState(): GameSideEffectsState {
@@ -115,33 +108,19 @@ export function buildPhoneApps(
 }
 
 export function buildConversationDisplayItems(
-  conversation: ConversationState,
-  timeline: ConversationTimelineEntry[]
+  conversation: ConversationState
 ): ConversationDisplayItem[] {
-  const timelineById = new Map(timeline.map((entry) => [entry.id, entry]));
   const items: ConversationDisplayItem[] = [];
 
   for (const event of conversation.events) {
-    if (event.type === 'message') {
-      items.push({
-        id: event.id,
-        type: 'message',
-        event,
-      });
-      continue;
-    }
-
-    const entry = timelineById.get(event.id);
-    if (!entry) {
+    if (event.type !== 'message') {
       continue;
     }
 
     items.push({
-      id: entry.id,
-      type: 'meta',
-      eventType: entry.eventType,
-      title: entry.title,
-      detail: entry.detail,
+      id: event.id,
+      type: 'message',
+      event,
     });
   }
 
