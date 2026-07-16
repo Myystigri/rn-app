@@ -53,12 +53,6 @@ export default function InboxScreen() {
           showsVerticalScrollIndicator={false}>
           {conversations.map((conversation) => {
             const preview = getConversationPreview(conversation);
-            const statusLabel =
-              conversation.status === 'idle'
-                ? 'Tap to start'
-                : conversation.status === 'ended'
-                  ? 'Scene finished'
-                  : 'Live';
 
             return (
               <Link
@@ -71,12 +65,7 @@ export default function InboxScreen() {
                   </ThemedView>
 
                   <View style={styles.threadContent}>
-                    <View style={styles.threadMeta}>
-                      <ThemedText type="smallBold">{conversation.title}</ThemedText>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        {statusLabel}
-                      </ThemedText>
-                    </View>
+                    <ThemedText type="smallBold">{conversation.title}</ThemedText>
 
                     <ThemedText
                       numberOfLines={2}
@@ -157,12 +146,6 @@ const styles = StyleSheet.create({
   threadContent: {
     flex: 1,
     gap: Spacing.half,
-  },
-  threadMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.two,
   },
   previewText: {
     lineHeight: 20,
