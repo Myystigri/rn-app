@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,7 +12,14 @@ import { DelayProfileId } from '@/game/types';
 const delayProfileIds = Object.keys(delayProfiles) as DelayProfileId[];
 
 export default function SettingsScreen() {
-  const { settings, updateSettings } = useGame();
+  const { restartGame, settings, updateSettings } = useGame();
+
+  function confirmRestart() {
+    Alert.alert('Restart game?', 'This clears the current story progress and starts from the beginning.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Restart', style: 'destructive', onPress: () => void restartGame() },
+    ]);
+  }
 
   return (
     <ThemedView style={styles.screen}>
@@ -70,6 +77,22 @@ export default function SettingsScreen() {
               })}
             </View>
           </ThemedView>
+
+          <ThemedView type="backgroundElement" style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <ThemedText type="smallBold">Game progress</ThemedText>
+              <ThemedText themeColor="textSecondary">
+                Clear the current story and return to the beginning.
+              </ThemedText>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={confirmRestart}
+              style={({ pressed }) => [styles.restartButton, pressed && styles.pressed]}>
+              <ThemedText type="smallBold">Restart game</ThemedText>
+            </Pressable>
+          </ThemedView>
         </View>
       </SafeAreaView>
     </ThemedView>
@@ -88,6 +111,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.four,
+    gap: Spacing.three,
   },
   section: {
     borderRadius: 8,
@@ -119,5 +143,13 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  restartButton: {
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#C94242',
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
 });

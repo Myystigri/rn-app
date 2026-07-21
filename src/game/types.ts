@@ -2,8 +2,6 @@ export type MessageDirection = 'incoming' | 'outgoing' | 'system';
 
 export type DelayProfileId = 'fast' | 'normal' | 'slow';
 
-export type ConversationStatus = 'idle' | 'active' | 'ended';
-
 export type PendingChoice = {
   id: number;
   text: string;
@@ -20,15 +18,10 @@ export type MessageEvent = {
   delayMs?: number;
 };
 
-export type ChoicesEvent = {
-  type: 'choices';
-  id: string;
-  choices: PendingChoice[];
-};
-
 export type NotificationEvent = {
   type: 'notification';
   id: string;
+  conversationId: string;
   appId: string;
   title: string;
   body: string;
@@ -37,6 +30,7 @@ export type NotificationEvent = {
 export type UnlockAppEvent = {
   type: 'unlock-app';
   id: string;
+  conversationId: string;
   appId: string;
 };
 
@@ -53,25 +47,17 @@ export type TypingEvent = {
   durationMs: number;
 };
 
-export type SceneEndedEvent = {
-  type: 'scene-ended';
-  id: string;
-  sceneId: string;
-};
-
 export type GameEvent =
   | MessageEvent
-  | ChoicesEvent
   | NotificationEvent
   | UnlockAppEvent
-  | UnlockConversationEvent
-  | TypingEvent
-  | SceneEndedEvent;
+  | UnlockConversationEvent;
 
 export type CompiledInkStory = Record<string, unknown>;
 
 export type StoryDefinition = {
   id: string;
+  entryPoint: string;
   compiledStory: CompiledInkStory;
   contentVersion: string;
 };
@@ -79,7 +65,6 @@ export type StoryDefinition = {
 export type ConversationDefinition = {
   id: string;
   title: string;
-  startSceneId: string;
   unlockedByDefault?: boolean;
 };
 
@@ -93,7 +78,6 @@ export type PersistedDeliveryState = {
 export type ConversationState = {
   id: string;
   title: string;
-  status: ConversationStatus;
   events: GameEvent[];
   pendingChoices: PendingChoice[];
   activeTyping: TypingEvent | null;
@@ -119,7 +103,7 @@ export type PhoneAppState = PhoneAppDefinition & {
 
 export type ConversationTimelineEntry = {
   id: string;
-  eventType: 'notification' | 'unlock-app' | 'unlock-conversation' | 'scene-ended';
+  eventType: 'notification' | 'unlock-app' | 'unlock-conversation';
   title: string;
   detail?: string;
 };

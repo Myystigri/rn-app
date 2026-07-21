@@ -9,7 +9,7 @@
 # conversation:maya
 Are you there?
 
-* [Yeah. What's going on?]
+* # conversation:maya [Yeah. What's going on?]
     # id:intro.player.001
     # speaker:player
     # conversation:maya
@@ -28,7 +28,7 @@ Are you there?
 
     -> maya_apartment_warning
 
-* [Who is this?]
+* # conversation:maya [Who is this?]
     # id:intro.player.002
     # speaker:player
     # conversation:maya
@@ -53,7 +53,7 @@ Are you there?
 # conversation:maya
 I am serious. The front door just moved.
 
-* [Call the police.]
+* # conversation:maya [Call the police.]
     # id:intro.player.003
     # speaker:player
     # conversation:maya
@@ -66,7 +66,7 @@ I am serious. The front door just moved.
 
     -> maya_waiting
 
-* [Lock yourself in the bathroom.]
+* # conversation:maya [Lock yourself in the bathroom.]
     # id:intro.player.004
     # speaker:player
     # conversation:maya
@@ -100,6 +100,34 @@ I can hear footsteps in the hall.
 # conversation:bob
 Hi buddy.
 
+* # conversation:bob [Yo Bob]
+    # id:intro.player.005
+    # speaker:player
+    # conversation:bob
+    Yo bob whats up ?
+
+    # id:intro.unknown.002
+    # speaker:bob
+    # conversation:bob
+    Im fine and you ?
+
+    -> maya_after_bob
+
+* # conversation:bob [new phone]
+    # id:intro.player.006
+    # speaker:player
+    # conversation:bob
+    new phone who dis?
+
+    # id:intro.unknown.007
+    # speaker:bob
+    # conversation:bob
+    stop playing with me
+
+    -> maya_after_bob
+
+=== maya_after_bob ===
+
 # id:intro.maya.010
 # speaker:maya
 # conversation:maya
@@ -107,21 +135,14 @@ Stay here. I am going to keep texting.
 
 # type:unlock-app
 # id:intro.unlock.case-files
+# conversation:maya
 # app:case-files
 
 # type:notification
 # id:intro.notification.case-files
+# conversation:maya
 # app:case-files
 # title:Case Files unlocked
 # body:Maya synced a new surface to your phone.
-
--> END
-
-=== bob_introduction ===
-
-# id:bob.intro.001
-# speaker:bob
-# conversation:bob
-Hi buddy.
 
 -> END

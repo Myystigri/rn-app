@@ -4,6 +4,7 @@ import mainStory from '@/story/generated/main.story.json';
 
 export const mainStoryDefinition: StoryDefinition = {
   id: 'main',
+  entryPoint: 'maya_introduction',
   compiledStory: mainStory,
   contentVersion: createStoryContentVersion(mainStory),
 };
@@ -12,13 +13,11 @@ export const conversationDefinitions: ConversationDefinition[] = [
   {
     id: 'maya',
     title: 'Maya',
-    startSceneId: 'maya_introduction',
     unlockedByDefault: true,
   },
   {
     id: 'bob',
     title: 'unknown',
-    startSceneId: 'bob_introduction',
     unlockedByDefault: false,
   },
 ];

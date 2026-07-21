@@ -64,7 +64,6 @@ describe('loadGameSnapshot', () => {
       sequence: 8,
       conversationsById: {
         maya: {
-          status: 'active',
           pendingChoices: [{ id: 0, text: 'Reply' }],
           events: [
             {

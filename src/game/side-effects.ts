@@ -73,13 +73,6 @@ export function reduceGameSideEffects(
         continue;
       }
 
-      if (event.type === 'scene-ended') {
-        timeline.push({
-          id: event.id,
-          eventType: 'scene-ended',
-          title: 'Scene ended',
-        });
-      }
     }
 
     timelineByConversationId[conversationId] = timeline;

@@ -18,7 +18,6 @@ import {
   hasDuePendingDelivery,
   markEventDelivered,
   reconcileDeliveryRuntime,
-  resetDeliveryRuntime,
   scheduleDelayedDelivery,
   toPersistedDeliveryState,
 } from '@/game/delivery';
@@ -51,20 +50,18 @@ type GameContextValue = {
   notifications: NotificationEvent[];
   conversationTimelineById: Record<string, ConversationTimelineEntry[]>;
   settings: GameSettings;
-  startConversation: (conversationId: string) => Promise<void>;
   choose: (conversationId: string, choiceId: number) => Promise<void>;
-  restartConversation: (conversationId: string) => Promise<void>;
+  restartGame: () => Promise<void>;
   updateSettings: (nextSettings: Partial<GameSettings>) => Promise<void>;
   renameConversation: (conversationId: string, title: string) => Promise<void>;
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
 
-function createIdleConversationState(definition: (typeof conversationDefinitions)[number]): ConversationState {
+function createEmptyConversationState(definition: (typeof conversationDefinitions)[number]): ConversationState {
   return {
     id: definition.id,
     title: definition.title,
-    status: 'idle',
     events: [],
     pendingChoices: [],
     activeTyping: null,
@@ -75,7 +72,7 @@ function createInitialConversationState() {
   return Object.fromEntries(
     conversationDefinitions.map((definition) => [
       definition.id,
-      createIdleConversationState(definition),
+      createEmptyConversationState(definition),
     ])
   ) as Record<string, ConversationState>;
 }
@@ -126,6 +123,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       let nextStorySession = new InkStorySession(mainStoryDefinition, conversationDefinitions);
       const nextDelivery = createInitialDeliveryRuntime();
       let nextConversationsById = createInitialConversationState();
+      let nextSettings = defaultGameSettings;
+      let restoredSnapshot: Awaited<ReturnType<typeof loadGameSnapshot>> = null;
 
       try {
         const [snapshot, savedSettings, savedContactNames] = await Promise.all([
@@ -133,6 +132,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           loadGameSettings(db),
           loadContactNames(db),
         ]);
+        nextSettings = savedSettings;
         contactNamesRef.current = savedContactNames;
 
         if (snapshot) {
@@ -142,42 +142,39 @@ export function GameProvider({ children }: { children: ReactNode }) {
               conversationDefinitions,
               snapshot
             );
-
-            for (const definition of conversationDefinitions) {
-              const conversationSnapshot = nextStorySession.conversationSnapshot(definition.id);
-              if (!conversationSnapshot) {
-                continue;
-              }
-
-              nextDelivery[definition.id] = createDeliveryRuntime(
-                snapshot.conversationsById[definition.id]?.delivery ?? {
-                  visibleEventCount: conversationSnapshot.events.length,
-                }
-              );
-              reconcileDeliveryRuntime(
-                nextDelivery[definition.id],
-                conversationSnapshot,
-                savedSettings
-              );
-              nextConversationsById[definition.id] = applyContactTitle(buildConversationState(
-                conversationSnapshot,
-                nextDelivery[definition.id]
-              ), savedContactNames[definition.id]);
-            }
+            restoredSnapshot = snapshot;
           } catch (error) {
             console.error('Failed to restore shared Ink story state', error);
             await deleteGameSnapshot(db);
             nextStorySession = new InkStorySession(mainStoryDefinition, conversationDefinitions);
-            nextConversationsById = createInitialConversationState();
           }
-        }
-
-        if (isMounted) {
-          settingsRef.current = savedSettings;
-          setSettings(savedSettings);
         }
       } catch (error) {
         console.error('Failed to hydrate game state from SQLite', error);
+      }
+
+      if (!restoredSnapshot) {
+        nextStorySession.start();
+      }
+
+      for (const definition of conversationDefinitions) {
+        const conversationSnapshot = nextStorySession.conversationSnapshot(definition.id);
+        if (!conversationSnapshot) {
+          continue;
+        }
+
+        nextDelivery[definition.id] = createDeliveryRuntime(
+          restoredSnapshot
+            ? restoredSnapshot.conversationsById[definition.id]?.delivery ?? {
+                visibleEventCount: conversationSnapshot.events.length,
+              }
+            : { visibleEventCount: 0 }
+        );
+        reconcileDeliveryRuntime(nextDelivery[definition.id], conversationSnapshot, nextSettings);
+        nextConversationsById[definition.id] = applyContactTitle(
+          buildConversationState(conversationSnapshot, nextDelivery[definition.id]),
+          contactNamesRef.current[definition.id]
+        );
       }
 
       if (!isMounted) {
@@ -186,6 +183,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       storySessionRef.current = nextStorySession;
       deliveryRef.current = nextDelivery;
+      settingsRef.current = nextSettings;
+      setSettings(nextSettings);
       setConversationsById(applyContactTitles(nextConversationsById, contactNamesRef.current));
       setSideEffects(reduceGameSideEffects(nextConversationsById, phoneAppDefinitionById));
       setIsHydrated(true);
@@ -199,27 +198,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       clearAllDeliveryTimersRef.current();
     };
   }, [db]);
-
-  async function startConversation(conversationId: string) {
-    if (!isHydrated || !conversationDefinitionById[conversationId]) {
-      return;
-    }
-
-    const session = storySessionRef.current;
-    if (!session) {
-      return;
-    }
-
-    const conversation = session.conversationSnapshot(conversationId);
-    if (conversation?.status === 'idle') {
-      resetConversationDelivery(conversationId);
-    }
-
-    session.startConversation(conversationId);
-    commitAllConversationStates(session);
-    await persistGame();
-    flushAllConversationDelivery();
-  }
 
   async function choose(conversationId: string, choiceId: number) {
     if (!isHydrated) {
@@ -237,22 +215,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     flushAllConversationDelivery();
   }
 
-  async function restartConversation(conversationId: string) {
-    if (!isHydrated || !conversationDefinitionById[conversationId]) {
+  async function restartGame() {
+    if (!isHydrated) {
       return;
     }
 
     clearAllDeliveryTimers();
-    storySessionRef.current = new InkStorySession(mainStoryDefinition, conversationDefinitions);
+    const nextSession = new InkStorySession(mainStoryDefinition, conversationDefinitions);
+    nextSession.start();
+    storySessionRef.current = nextSession;
     deliveryRef.current = createInitialDeliveryRuntime();
-    setConversationsById(createInitialConversationState());
-    setSideEffects(createInitialSideEffectsState());
+    commitAllConversationStates(nextSession);
 
     await runGamePersistence(async () => {
       await deleteGameSnapshot(db);
     }, 'Failed to clear game state before restart');
 
-    await startConversation(conversationId);
+    await persistGame();
+    flushAllConversationDelivery();
   }
 
   async function updateSettings(nextSettings: Partial<GameSettings>) {
@@ -364,9 +344,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         notifications: sideEffects.notifications,
         conversationTimelineById: sideEffects.timelineByConversationId,
         settings,
-        startConversation,
         choose,
-        restartConversation,
+        restartGame,
         updateSettings,
         renameConversation,
       }}>
@@ -440,14 +419,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     void persistGame();
   }
 
-  function resetConversationDelivery(conversationId: string) {
-    const runtime = deliveryRef.current[conversationId] ?? createDeliveryRuntime();
-    clearConversationDeliveryTimer(conversationId);
-    resetDeliveryRuntime(runtime, 0);
-    deliveryRef.current[conversationId] = runtime;
-    return runtime;
-  }
-
   function clearConversationDeliveryTimer(conversationId: string) {
     const runtime = deliveryRef.current[conversationId];
     if (!runtime?.timerId) {
@@ -517,11 +488,7 @@ export function getConversationPreview(conversation: ConversationState) {
     return latestMessage.text;
   }
 
-  if (conversation.status === 'ended') {
-    return 'Conversation complete';
-  }
-
-  return 'Open the thread and start the scene.';
+  return 'No messages yet.';
 }
 
 export function toDisplayName(value: string) {

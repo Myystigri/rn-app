@@ -21,7 +21,6 @@ export function buildConversationState(
 
   return {
     ...sessionState,
-    status: hasPendingDeliveries ? 'active' : sessionState.status,
     events: sessionState.events.slice(0, visibleEventCount),
     pendingChoices: hasPendingDeliveries ? [] : sessionState.pendingChoices,
     activeTyping: runtime.activeTyping,

@@ -21,10 +21,9 @@ describe('InkStorySession', () => {
   it('maps the opening knot into app-owned messages and choices', () => {
     const session = createSession();
 
-    session.startConversation(mayaConversationId);
+    session.start();
 
     expect(session.conversationSnapshot(mayaConversationId)).toMatchObject({
-      status: 'active',
       events: [
         {
           type: 'message',
@@ -44,7 +43,7 @@ describe('InkStorySession', () => {
 
   it('restores shared Ink state and continues from the saved choice point', () => {
     const session = createSession();
-    session.startConversation(mayaConversationId);
+    session.start();
 
     const snapshot = session.serialize({
       [mayaConversationId]: createDeliveryState(1),
@@ -72,32 +71,51 @@ describe('InkStorySession', () => {
     ]);
   });
 
-  it('emits ending side effects after the final choice', () => {
+  it('routes a cross-conversation choice and its continuation to Bob', () => {
     const session = createSession();
-    session.startConversation(mayaConversationId);
+    session.start();
     session.choose(mayaConversationId, 1);
     session.choose(mayaConversationId, 0);
 
-    const conversation = session.conversationSnapshot(mayaConversationId);
-    expect(conversation?.status).toBe('ended');
-    expect(conversation?.events).toEqual(
+    expect(session.conversationSnapshot(mayaConversationId)?.pendingChoices).toEqual([]);
+    expect(session.conversationSnapshot('bob')).toMatchObject({
+      events: [
+        { type: 'unlock-conversation', id: 'intro.unlock.bob', conversationId: 'bob' },
+        { type: 'message', id: 'intro.unknown.001', conversationId: 'bob', speakerId: 'bob' },
+      ],
+      pendingChoices: [
+        { id: 0, text: 'Yo Bob' },
+        { id: 1, text: 'new phone' },
+      ],
+    });
+
+    session.choose(mayaConversationId, 0);
+    expect(session.conversationSnapshot('bob')?.pendingChoices).toHaveLength(2);
+
+    session.choose('bob', 0);
+
+    expect(session.conversationSnapshot(mayaConversationId)?.events).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'unlock-app', id: 'intro.unlock.case-files', appId: 'case-files' }),
+        expect.objectContaining({
+          type: 'unlock-app',
+          id: 'intro.unlock.case-files',
+          conversationId: 'maya',
+          appId: 'case-files',
+        }),
         expect.objectContaining({
           type: 'notification',
           id: 'intro.notification.case-files',
+          conversationId: 'maya',
           appId: 'case-files',
         }),
-        expect.objectContaining({ type: 'scene-ended', sceneId: 'maya_introduction' }),
       ])
     );
-
-    expect(session.conversationSnapshot('bob')).toMatchObject({
-      status: 'active',
-      events: [
-        { type: 'message', id: 'intro.unknown.001', conversationId: 'bob', speakerId: 'bob' },
-      ],
-    });
+    expect(session.conversationSnapshot('bob')?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'message', id: 'intro.player.005', conversationId: 'bob' }),
+        expect.objectContaining({ type: 'message', id: 'intro.unknown.002', conversationId: 'bob' }),
+      ])
+    );
   });
 
   it('rejects an incompatible saved story version', () => {

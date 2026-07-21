@@ -23,7 +23,6 @@ function createConversation(): ConversationState {
   return {
     id: 'maya',
     title: 'Maya',
-    status: 'active',
     events: [incomingMessage],
     pendingChoices: [{ id: 0, text: 'Reply' }],
     activeTyping: null,
@@ -37,7 +36,6 @@ describe('delivery runtime', () => {
     scheduleDelayedDelivery(runtime, incomingMessage, 1_000, now);
 
     expect(buildConversationState(createConversation(), runtime)).toMatchObject({
-      status: 'active',
       events: [],
       pendingChoices: [],
       activeTyping: {
@@ -64,7 +62,6 @@ describe('delivery runtime', () => {
 
     markEventDelivered(runtime, dueAt);
     expect(buildConversationState(createConversation(), runtime)).toMatchObject({
-      status: 'active',
       events: [incomingMessage],
       pendingChoices: [{ id: 0, text: 'Reply' }],
       activeTyping: null,

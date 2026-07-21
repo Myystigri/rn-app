@@ -4,14 +4,14 @@ import type {
   ConversationSessionSaveSnapshot,
   InkStorySaveSnapshot,
 } from '@/game/ink-session';
-import type { ConversationState, GameEvent, PendingChoice } from '@/game/types';
+import type { GameEvent, PendingChoice } from '@/game/types';
 import { withGameTransaction } from '@/game/persistence/transaction';
 
 const STORY_SAVE_ID = '__story__';
 
 type ConversationSaveRow = {
   conversation_id: string;
-  status: ConversationState['status'];
+  status: string;
   story_id: string | null;
   story_version: string | null;
   ink_state_json: string | null;
@@ -85,13 +85,12 @@ export async function loadGameSnapshot(db: SQLiteDatabase): Promise<InkStorySave
     }
 
     const pendingChoices = parseJson<PendingChoice[]>(row.pending_choices_json);
-    if (!isConversationStatus(row.status) || !pendingChoices) {
+    if (!pendingChoices) {
       continue;
     }
 
     const events = eventsByConversation.get(row.conversation_id) ?? [];
     conversationsById[row.conversation_id] = {
-      status: row.status,
       pendingChoices,
       events,
       delivery: {
@@ -113,11 +112,6 @@ export async function loadGameSnapshot(db: SQLiteDatabase): Promise<InkStorySave
 }
 
 export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySaveSnapshot) {
-  if (!snapshot.inkStateJson && isEveryConversationIdle(snapshot)) {
-    await deleteGameSnapshot(db);
-    return;
-  }
-
   await withGameTransaction(db, async (txn) => {
     await txn.runAsync('DELETE FROM game_events');
     await txn.runAsync('DELETE FROM conversation_saves');
@@ -141,7 +135,7 @@ export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySav
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       STORY_SAVE_ID,
-      getStoryStatus(snapshot),
+      'active',
       snapshot.storyId ?? null,
       snapshot.storyVersion ?? null,
       snapshot.inkStateJson ?? null,
@@ -174,7 +168,7 @@ export async function saveGameSnapshot(db: SQLiteDatabase, snapshot: InkStorySav
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         conversationId,
-        conversation.status,
+        'active',
         null,
         null,
         null,
@@ -223,30 +217,4 @@ function parseJson<T>(value: string) {
   } catch {
     return null;
   }
-}
-
-function isConversationStatus(value: string): value is ConversationState['status'] {
-  return value === 'idle' || value === 'active' || value === 'ended';
-}
-
-function getStoryStatus(snapshot: InkStorySaveSnapshot): ConversationState['status'] {
-  const conversations = Object.values(snapshot.conversationsById);
-  if (conversations.some((conversation) => conversation.status === 'active')) {
-    return 'active';
-  }
-
-  if (conversations.some((conversation) => conversation.status === 'ended')) {
-    return 'ended';
-  }
-
-  return 'idle';
-}
-
-function isEveryConversationIdle(snapshot: InkStorySaveSnapshot) {
-  return Object.values(snapshot.conversationsById).every(
-    (conversation) =>
-      conversation.status === 'idle' &&
-      conversation.events.length === 0 &&
-      conversation.pendingChoices.length === 0
-  );
 }

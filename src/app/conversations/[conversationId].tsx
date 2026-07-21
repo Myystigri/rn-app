@@ -17,12 +17,7 @@ export default function ConversationScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const theme = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
-  const {
-    conversationsById,
-    startConversation,
-    choose,
-    restartConversation,
-  } = useGame();
+  const { conversationsById, choose } = useGame();
   const conversation = conversationId ? conversationsById[conversationId] : undefined;
 
   useEffect(() => {
@@ -73,7 +68,7 @@ export default function ConversationScreen() {
             <View style={styles.emptyState}>
               <ThemedText type="smallBold">{conversation.title}</ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-                Enter the thread, then start the scene to let Ink drive the messages.
+                No messages yet.
               </ThemedText>
             </View>
           ) : (
@@ -93,10 +88,6 @@ export default function ConversationScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {conversation.status === 'idle' ? (
-            <FooterButton label="Start scene" onPress={() => startConversation(conversation.id)} />
-          ) : null}
-
           {conversation.pendingChoices.map((choice) => (
             <FooterButton
               key={choice.id}
@@ -105,13 +96,6 @@ export default function ConversationScreen() {
             />
           ))}
 
-          {conversation.status !== 'idle' ? (
-            <Pressable
-              onPress={() => restartConversation(conversation.id)}
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
-              <ThemedText type="smallBold">Restart</ThemedText>
-            </Pressable>
-          ) : null}
         </View>
       </SafeAreaView>
     </ThemedView>
@@ -248,10 +232,6 @@ const styles = StyleSheet.create({
   },
   choiceText: {
     lineHeight: 22,
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    paddingVertical: Spacing.one,
   },
   pressed: {
     opacity: 0.72,

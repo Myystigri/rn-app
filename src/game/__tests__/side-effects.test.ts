@@ -9,7 +9,6 @@ import { ConversationState } from '@/game/types';
 const maya: ConversationState = {
   id: 'maya',
   title: 'Maya',
-  status: 'ended',
   pendingChoices: [],
   activeTyping: null,
   events: [
@@ -24,6 +23,7 @@ const maya: ConversationState = {
     {
       type: 'unlock-app',
       id: 'unlock.case-files',
+      conversationId: 'maya',
       appId: 'case-files',
     },
     {
@@ -34,14 +34,10 @@ const maya: ConversationState = {
     {
       type: 'notification',
       id: 'notification.case-files',
+      conversationId: 'maya',
       appId: 'case-files',
       title: 'Case Files unlocked',
       body: 'New material is available.',
-    },
-    {
-      type: 'scene-ended',
-      id: 'scene.ended',
-      sceneId: 'maya_introduction',
     },
   ],
 };
@@ -72,7 +68,6 @@ describe('side-effect projections', () => {
         title: 'Case Files unlocked',
         detail: 'New material is available.',
       },
-      { id: 'scene.ended', eventType: 'scene-ended', title: 'Scene ended' },
     ]);
 
     const apps = buildPhoneApps(phoneAppDefinitions, sideEffects);
