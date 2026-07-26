@@ -45,7 +45,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "compile:ink:private": "npx inkjs -o src/story/generated/main.story.json src/story/private/main.ink"
   },
   "private": true
 }

@@ -71,8 +71,15 @@ describe('side-effect projections', () => {
     ]);
 
     const apps = buildPhoneApps(phoneAppDefinitions, sideEffects);
-    expect(apps.find((app) => app.id === 'case-files')).toMatchObject({ isUnlocked: true });
-    expect(apps.find((app) => app.id === 'notifications')).toMatchObject({ badgeCount: 1 });
+    expect(apps.filter((app) => app.isUnlocked).map((app) => app.id)).toEqual([
+      'messages',
+      'settings',
+      'case-files',
+    ]);
+    expect(apps.find((app) => app.id === 'case-files')).toMatchObject({
+      isUnlocked: true,
+      badgeCount: 1,
+    });
   });
 
   it('renders messages without exposing metadata events in the conversation', () => {

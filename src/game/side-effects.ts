@@ -91,12 +91,12 @@ export function buildPhoneApps(
   sideEffects: GameSideEffectsState
 ): PhoneAppState[] {
   const unlockedAppIds = new Set(sideEffects.unlockedAppIds);
-  const notificationCount = sideEffects.notifications.length;
 
   return phoneApps.map((app) => ({
     ...app,
     isUnlocked: app.unlockedByDefault || unlockedAppIds.has(app.id),
-    badgeCount: app.id === 'messages' ? 0 : app.id === 'notifications' ? notificationCount : 0,
+    badgeCount: sideEffects.notifications.filter((notification) => notification.appId === app.id)
+      .length,
   }));
 }
 

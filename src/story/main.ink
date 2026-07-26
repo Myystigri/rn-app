@@ -1,4 +1,4 @@
-=== maya_introduction ===
+=== main_start ===
 
 // Message images use paths relative to assets/story-images, for example:
 // # image:maya/apartment-door.jpg

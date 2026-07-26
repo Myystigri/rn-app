@@ -124,7 +124,7 @@ function MessageBubble({
     event: MessageEvent;
     isPlayer: boolean;
     accentColor: string;
-    isGroupChat: boolean;
+    isGroupChat?: boolean;
 }) {
     const imageSource = event.imagePath ? resolveStoryImage(event.imagePath) : undefined;
 
@@ -159,8 +159,6 @@ function FooterButton({label, onPress}: { label: string; onPress: () => void }) 
         </Pressable>
     );
 }
-
-const isGroupConvo = false;
 
 const styles = StyleSheet.create({
     screen: {

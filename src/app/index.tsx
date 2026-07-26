@@ -5,82 +5,94 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { getConversationPreview, useGame } from '@/game/game-provider';
+import { useGame } from '@/game/game-provider';
+import { PhoneAppState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 
-export default function InboxScreen() {
+const appColumnCount = 4;
+const appColumnGap = Spacing.three;
+const maxHomeContentWidth = 528;
+
+export default function PhoneHomeScreen() {
   const theme = useTheme();
-  const { conversations } = useGame();
+  const { apps } = useGame();
+  const unlockedApps = apps.filter((app) => app.isUnlocked);
+  const appRows = Array.from(
+    { length: Math.ceil(unlockedApps.length / appColumnCount) },
+    (_, rowIndex) =>
+      unlockedApps.slice(rowIndex * appColumnCount, (rowIndex + 1) * appColumnCount)
+  );
 
   return (
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <View style={styles.headerTopRow}>
-            <View style={styles.headerCopy}>
-              <ThemedText type="smallBold" themeColor="textSecondary">
-                MYYST
-              </ThemedText>
-              <ThemedText type="subtitle">Messages</ThemedText>
-              <ThemedText themeColor="textSecondary">
-                Shared story state, delivered like a phone.
-              </ThemedText>
-            </View>
-
-            <View style={styles.headerActions}>
-              <Link href={'/explore' as Href} asChild>
-                <Pressable style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}>
-                  <ThemedView type="backgroundElement" style={styles.settingsButtonSurface}>
-                    <ThemedText type="smallBold">Phone</ThemedText>
-                  </ThemedView>
-                </Pressable>
-              </Link>
-
-              <Link href={'/settings' as Href} asChild>
-                <Pressable style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}>
-                  <ThemedView type="backgroundElement" style={styles.settingsButtonSurface}>
-                    <ThemedText type="smallBold">Settings</ThemedText>
-                  </ThemedView>
-                </Pressable>
-              </Link>
-            </View>
-          </View>
-        </View>
-
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={styles.homeContent}
           showsVerticalScrollIndicator={false}>
-          {conversations.map((conversation) => {
-            const preview = getConversationPreview(conversation);
 
-            return (
-              <Link
-                key={conversation.id}
-                href={`/conversations/${conversation.id}` as Href}
-                asChild>
-                <Pressable style={({ pressed }) => [styles.threadRow, pressed && styles.pressed]}>
-                  <ThemedView type="backgroundElement" style={styles.avatar}>
-                    <ThemedText type="smallBold">{conversation.title.slice(0, 1)}</ThemedText>
-                  </ThemedView>
-
-                  <View style={styles.threadContent}>
-                    <ThemedText type="smallBold">{conversation.title}</ThemedText>
-
-                    <ThemedText
-                      numberOfLines={2}
-                      style={[styles.previewText, { color: theme.text }]}
-                      themeColor="textSecondary">
-                      {preview}
-                    </ThemedText>
-                  </View>
-                </Pressable>
-              </Link>
-            );
-          })}
+          <View style={styles.appGrid}>
+            {appRows.map((row, rowIndex) => (
+              <View key={row[0]?.id ?? rowIndex} style={styles.appRow}>
+                {row.map((app) => (
+                  <HomeApp key={app.id} app={app} badgeColor={theme.background} />
+                ))}
+                {Array.from({ length: appColumnCount - row.length }, (_, emptyIndex) => (
+                  <View key={`empty-${emptyIndex}`} style={styles.appCell} />
+                ))}
+              </View>
+            ))}
+          </View>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function HomeApp({
+  app,
+  badgeColor,
+}: {
+  app: PhoneAppState;
+  badgeColor: string;
+}) {
+  const appContents = (
+    <View style={styles.appContents}>
+      <View style={[styles.icon, { backgroundColor: app.icon.backgroundColor }]}>
+        <ThemedText style={[styles.iconGlyph, { color: app.icon.foregroundColor }]}>
+          {app.icon.glyph}
+        </ThemedText>
+        {app.badgeCount > 0 ? (
+          <View style={[styles.badge, { borderColor: badgeColor }]}>
+            <ThemedText style={styles.badgeText}>{app.badgeCount}</ThemedText>
+          </View>
+        ) : null}
+      </View>
+      <ThemedText type="default" numberOfLines={1} style={styles.appLabel}>
+        {app.title}
+      </ThemedText>
+    </View>
+  );
+
+  return (
+    <View style={styles.appCell}>
+      {app.route ? (
+        <Link href={app.route as Href} asChild>
+          <Pressable
+            accessibilityLabel={`Open ${app.title}`}
+            accessibilityRole="link"
+            style={({ pressed }) => [styles.appButton, pressed && styles.pressed]}>
+            {appContents}
+          </Pressable>
+        </Link>
+      ) : (
+        <View
+          accessibilityLabel={`${app.title}, not available yet`}
+          style={styles.appButton}>
+          {appContents}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -91,63 +103,96 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.two,
-  },
-  headerTopRow: {
+  statusBar: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: Spacing.two,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: Spacing.one,
-  },
-  settingsButton: {
-    borderRadius: 14,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  settingsButtonSurface: {
-    borderRadius: 14,
+    alignItems: 'center',
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    paddingTop: Spacing.two,
   },
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
+  homeContent: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: maxHomeContentWidth,
+    alignSelf: 'center',
     paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.five,
     paddingBottom: Spacing.five,
   },
-  threadRow: {
+  homeCopy: {
+    gap: Spacing.one,
+    marginBottom: Spacing.six,
+  },
+  appGrid: {
+    rowGap: Spacing.four,
+  },
+  appRow: {
     flexDirection: 'row',
+    columnGap: appColumnGap,
+  },
+  appCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  appButton: {
+    width: '100%',
+  },
+  appContents: {
+    width: '100%',
+    minWidth: 0,
     alignItems: 'center',
     gap: Spacing.two,
-    paddingVertical: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#9095A133',
   },
-  pressed: {
-    opacity: 0.75,
+  icon: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  iconGlyph: {
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -3,
+    lineHeight: 42,
+    marginTop: -4,
+  },
+  badge: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    minWidth: 28,
+    height: 28,
+    paddingHorizontal: Spacing.one,
+    borderRadius: 14,
+    borderWidth: 3,
+    backgroundColor: '#D63B3B',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  threadContent: {
-    flex: 1,
-    gap: Spacing.half,
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 15,
   },
-  previewText: {
+  appLabel: {
+    maxWidth: '100%',
+    fontSize: 15,
     lineHeight: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  pressed: {
+    opacity: 0.68,
+    transform: [{ scale: 0.96 }],
   },
 });

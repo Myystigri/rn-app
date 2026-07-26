@@ -4,7 +4,7 @@ import mainStory from '@/story/generated/main.story.json';
 
 export const mainStoryDefinition: StoryDefinition = {
   id: 'main',
-  entryPoint: 'maya_introduction',
+  entryPoint: 'main_start',
   compiledStory: mainStory,
   contentVersion: createStoryContentVersion(mainStory),
 };
@@ -12,7 +12,7 @@ export const mainStoryDefinition: StoryDefinition = {
 export const conversationDefinitions: ConversationDefinition[] = [
   {
     id: 'maya',
-    title: 'Maya',
+    title: 'unknown',
     unlockedByDefault: true,
   },
   {
@@ -31,8 +31,13 @@ export const phoneAppDefinitions: PhoneAppDefinition[] = [
     id: 'messages',
     title: 'Messages',
     description: 'Active conversations and replies.',
-    route: '/',
+    route: '/messages',
     unlockedByDefault: true,
+    icon: {
+      glyph: '🗨️',
+      backgroundColor: '#63D56E',
+      foregroundColor: '#0B3D18',
+    },
   },
   {
     id: 'settings',
@@ -40,34 +45,35 @@ export const phoneAppDefinitions: PhoneAppDefinition[] = [
     description: 'Delivery speed and app behavior.',
     route: '/settings',
     unlockedByDefault: true,
+    icon: {
+      glyph: '⚙️',
+      backgroundColor: '#A9AFB8',
+      foregroundColor: '#1D222A',
+    },
   },
   {
-    id: 'notifications',
-    title: 'Notifications',
-    description: 'System alerts and unlocked surfaces.',
-    route: null,
+    id: 'photos',
+    title: 'Photos',
+    description: 'A recollection of all the images shared by or with you until now',
+    route: '/settings',
     unlockedByDefault: true,
+    icon: {
+      glyph: '🖼️',
+      backgroundColor: '#5393f3',
+      foregroundColor: '#1D222A',
+    },
   },
   {
-    id: 'case-files',
-    title: 'Case Files',
-    description: 'Locked',
-    route: null,
-    unlockedByDefault: false,
-  },
-  {
-    id: 'contacts',
-    title: 'Contacts',
-    description: 'Locked',
-    route: null,
-    unlockedByDefault: false,
-  },
-  {
-    id: 'network',
-    title: 'Network',
-    description: 'Locked',
-    route: null,
-    unlockedByDefault: false,
+    id: 'insta',
+    title: 'Insta',
+    description: 'A picture-based social network !',
+    route: '/settings',
+    unlockedByDefault: true,
+    icon: {
+      glyph: '📸',
+      backgroundColor: '#b545f4',
+      foregroundColor: '#1D222A',
+    },
   },
 ];
 

@@ -94,6 +94,11 @@ export type PhoneAppDefinition = {
   description: string;
   route: string | null;
   unlockedByDefault: boolean;
+  icon: {
+    glyph: string;
+    backgroundColor: string;
+    foregroundColor: string;
+  };
 };
 
 export type PhoneAppState = PhoneAppDefinition & {
