@@ -4,6 +4,7 @@ import {
   ConversationDefinition,
   ConversationState,
   GameEvent,
+  MessageContentSegment,
   MessageDirection,
   PendingChoice,
   PersistedDeliveryState,
@@ -343,6 +344,7 @@ function toEventsForTagGroup({
 
   const speakerId = normalizeSpeakerId(tags.speaker);
   const normalizedText = stripSpeakerPrefix(rawText, speakerId);
+  const content = parseMessageContent(normalizedText);
   const delayMs = toNumber(tags.delay);
 
   return [
@@ -352,11 +354,55 @@ function toEventsForTagGroup({
       conversationId,
       speakerId,
       direction: toMessageDirection(speakerId),
-      text: normalizedText,
+      text: content.text,
+      ...(content.segments ? { content: content.segments } : {}),
       imagePath,
       delayMs,
     },
   ];
+}
+
+const appLinkPattern = /<app-link\s+app=(?:"([^"]+)"|'([^']+)'|([^\s>]+))\s*>([\s\S]*?)<\/app-link>/g;
+
+function parseMessageContent(rawText: string): {
+  text: string;
+  segments?: MessageContentSegment[];
+} {
+  const segments: MessageContentSegment[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = appLinkPattern.exec(rawText))) {
+    const [markup, doubleQuotedAppId, singleQuotedAppId, unquotedAppId, linkText] = match;
+    const appId = doubleQuotedAppId ?? singleQuotedAppId ?? unquotedAppId;
+    const textBeforeLink = rawText.slice(cursor, match.index);
+
+    if (textBeforeLink) {
+      segments.push({ type: 'text', text: textBeforeLink });
+    }
+
+    if (appId && linkText) {
+      segments.push({ type: 'app-link', appId, text: linkText });
+    } else {
+      segments.push({ type: 'text', text: markup });
+    }
+
+    cursor = match.index + markup.length;
+  }
+
+  if (segments.length === 0) {
+    return { text: rawText };
+  }
+
+  const trailingText = rawText.slice(cursor);
+  if (trailingText) {
+    segments.push({ type: 'text', text: trailingText });
+  }
+
+  return {
+    text: segments.map((segment) => segment.text).join(''),
+    segments,
+  };
 }
 
 function getChoiceConversationId(tags: string[], choiceText: string) {

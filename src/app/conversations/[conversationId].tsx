@@ -1,4 +1,4 @@
-import {Href, Link, Stack, useLocalSearchParams} from 'expo-router';
+import {Href, Link, Stack, useLocalSearchParams, useRouter} from 'expo-router';
 import {Image} from 'expo-image';
 import {useEffect, useRef} from 'react';
 import {Pressable, ScrollView, StyleSheet, View} from 'react-native';
@@ -17,7 +17,8 @@ export default function ConversationScreen() {
     const {conversationId} = useLocalSearchParams<{ conversationId: string }>();
     const theme = useTheme();
     const scrollViewRef = useRef<ScrollView>(null);
-    const {conversationsById, choose} = useGame();
+    const router = useRouter();
+    const {apps, conversationsById, choose} = useGame();
     const conversation = conversationId ? conversationsById[conversationId] : undefined;
 
     useEffect(() => {
@@ -78,6 +79,11 @@ export default function ConversationScreen() {
                                 event={item.event}
                                 isPlayer={item.event.direction === 'outgoing'}
                                 accentColor={theme.text}
+                                onAppLinkPress={(appId) => {
+                                    if (apps.some((app) => app.id === appId && app.isUnlocked)) {
+                                        router.navigate('/');
+                                    }
+                                }}
                             />
                         ))
                     )}
@@ -119,11 +125,13 @@ function MessageBubble({
                            event,
                            isPlayer,
                            accentColor,
+                           onAppLinkPress,
                            isGroupChat = false
                        }: {
     event: MessageEvent;
     isPlayer: boolean;
     accentColor: string;
+    onAppLinkPress: (appId: string) => void;
     isGroupChat?: boolean;
 }) {
     const imageSource = event.imagePath ? resolveStoryImage(event.imagePath) : undefined;
@@ -144,7 +152,23 @@ function MessageBubble({
                 )}
 
                 {imageSource ? <Image source={imageSource} contentFit="cover" style={styles.messageImage}/> : null}
-                {event.text ? <ThemedText>{event.text}</ThemedText> : null}
+                {event.text ? (
+                    <ThemedText>
+                        {(event.content ?? [{type: 'text', text: event.text}]).map((segment, index) =>
+                            segment.type === 'app-link' ? (
+                                <ThemedText
+                                    key={`${segment.appId}-${index}`}
+                                    accessibilityRole="link"
+                                    onPress={() => onAppLinkPress(segment.appId)}
+                                    style={styles.appLink}>
+                                    {segment.text}
+                                </ThemedText>
+                            ) : (
+                                segment.text
+                            )
+                        )}
+                    </ThemedText>
+                ) : null}
             </ThemedView>
         </View>
     );
@@ -215,6 +239,10 @@ const styles = StyleSheet.create({
         maxWidth: '100%',
         aspectRatio: 4 / 3,
         borderRadius: 8,
+    },
+    appLink: {
+        color: '#3c87f7',
+        textDecorationLine: 'underline',
     },
     typingBubble: {
         minWidth: 120,

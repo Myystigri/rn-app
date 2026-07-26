@@ -67,8 +67,8 @@ export const phoneAppDefinitions: PhoneAppDefinition[] = [
     id: 'insta',
     title: 'Insta',
     description: 'A picture-based social network !',
-    route: '/settings',
-    unlockedByDefault: true,
+    route: null,
+    unlockedByDefault: false,
     icon: {
       glyph: '📸',
       backgroundColor: '#b545f4',

@@ -7,6 +7,17 @@ export type PendingChoice = {
   text: string;
 };
 
+export type MessageContentSegment =
+  | {
+      type: 'text';
+      text: string;
+    }
+  | {
+      type: 'app-link';
+      appId: string;
+      text: string;
+    };
+
 export type MessageEvent = {
   type: 'message';
   id: string;
@@ -14,6 +25,10 @@ export type MessageEvent = {
   speakerId: string;
   direction: MessageDirection;
   text: string;
+  /**
+   * Optional rich text produced by the Ink adapter. Omitted for legacy/plain-text messages.
+   */
+  content?: MessageContentSegment[];
   imagePath?: string;
   delayMs?: number;
 };
