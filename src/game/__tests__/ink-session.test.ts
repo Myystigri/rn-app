@@ -27,15 +27,16 @@ describe('InkStorySession', () => {
       events: [
         {
           type: 'message',
-          id: 'intro.maya.001',
+          id: 'main.event.1',
           conversationId: mayaConversationId,
           speakerId: 'maya',
           direction: 'incoming',
-          text: 'Are you there?',
+          text: "So ?! How's the phone ?? Does it still work ?",
+          time: '12:34',
         },
       ],
       pendingChoices: [
-        { id: 0, text: "Yeah. What's going on?" },
+        { id: 0, text: "Haven't really had time to play with it yet" },
         { id: 1, text: 'Who is this?' },
       ],
     });
@@ -54,68 +55,36 @@ describe('InkStorySession', () => {
 
     const conversation = restored.conversationSnapshot(mayaConversationId);
     expect(conversation?.events.map((event) => event.id)).toEqual([
-      'intro.maya.001',
-      'intro.player.001',
-      'intro.maya.0012',
-      'intro.maya.002',
-      'intro.maya.005',
+      'main.event.1',
+      'main.event.2',
+      'main.event.3',
+      'main.event.4',
+      'main.event.5',
+      'intro.unlock.insta',
     ]);
-    expect(conversation?.events[2]).toMatchObject({
-      type: 'message',
-      imagePath: 'img.png',
-      text: '',
-    });
     expect(conversation?.pendingChoices).toEqual([
-      { id: 0, text: 'Call the police.' },
-      { id: 1, text: 'Lock yourself in the bathroom.' },
+      { id: 0, text: "I don't like social networks" },
+      { id: 1, text: "Sure I'll try and download it" },
     ]);
   });
 
-  it('routes a cross-conversation choice and its continuation to Bob', () => {
+  it('continues through a second choice in the same conversation', () => {
     const session = createSession();
     session.start();
     session.choose(mayaConversationId, 1);
     session.choose(mayaConversationId, 0);
 
-    expect(session.conversationSnapshot(mayaConversationId)?.pendingChoices).toEqual([]);
-    expect(session.conversationSnapshot('bob')).toMatchObject({
-      events: [
-        { type: 'unlock-conversation', id: 'intro.unlock.bob', conversationId: 'bob' },
-        { type: 'message', id: 'intro.unknown.001', conversationId: 'bob', speakerId: 'bob' },
-      ],
-      pendingChoices: [
-        { id: 0, text: 'Yo Bob' },
-        { id: 1, text: 'new phone' },
-      ],
-    });
-
-    session.choose(mayaConversationId, 0);
-    expect(session.conversationSnapshot('bob')?.pendingChoices).toHaveLength(2);
-
-    session.choose('bob', 0);
-
     expect(session.conversationSnapshot(mayaConversationId)?.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'unlock-app',
-          id: 'intro.unlock.case-files',
+          id: 'intro.unlock.insta',
           conversationId: 'maya',
-          appId: 'case-files',
-        }),
-        expect.objectContaining({
-          type: 'notification',
-          id: 'intro.notification.case-files',
-          conversationId: 'maya',
-          appId: 'case-files',
+          appId: 'insta',
         }),
       ])
     );
-    expect(session.conversationSnapshot('bob')?.events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'message', id: 'intro.player.005', conversationId: 'bob' }),
-        expect.objectContaining({ type: 'message', id: 'intro.unknown.002', conversationId: 'bob' }),
-      ])
-    );
+    expect(session.conversationSnapshot(mayaConversationId)?.pendingChoices).toEqual([]);
   });
 
   it('rejects an incompatible saved story version', () => {

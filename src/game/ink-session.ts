@@ -346,6 +346,7 @@ function toEventsForTagGroup({
   const normalizedText = stripSpeakerPrefix(rawText, speakerId);
   const content = parseMessageContent(normalizedText);
   const delayMs = toNumber(tags.delay);
+  const time = tags.time || undefined;
 
   return [
     {
@@ -356,6 +357,7 @@ function toEventsForTagGroup({
       direction: toMessageDirection(speakerId),
       text: content.text,
       ...(content.segments ? { content: content.segments } : {}),
+      ...(time ? { time } : {}),
       imagePath,
       delayMs,
     },

@@ -13,6 +13,11 @@ export type ConversationDisplayItem =
       id: string;
       type: 'message';
       event: MessageEvent;
+    }
+  | {
+      id: string;
+      type: 'time-marker';
+      time: string;
     };
 
 export function createInitialSideEffectsState(): GameSideEffectsState {
@@ -104,10 +109,20 @@ export function buildConversationDisplayItems(
   conversation: ConversationState
 ): ConversationDisplayItem[] {
   const items: ConversationDisplayItem[] = [];
+  let latestTime: string | undefined;
 
   for (const event of conversation.events) {
     if (event.type !== 'message') {
       continue;
+    }
+
+    if (event.time && event.time !== latestTime) {
+      items.push({
+        id: `${event.id}.time`,
+        type: 'time-marker',
+        time: event.time,
+      });
+      latestTime = event.time;
     }
 
     items.push({

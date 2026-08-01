@@ -73,19 +73,23 @@ export default function ConversationScreen() {
                             </ThemedText>
                         </View>
                     ) : (
-                        displayItems.map((item) => (
-                            <MessageBubble
-                                key={item.id}
-                                event={item.event}
-                                isPlayer={item.event.direction === 'outgoing'}
-                                accentColor={theme.text}
-                                onAppLinkPress={(appId) => {
-                                    if (apps.some((app) => app.id === appId && app.isUnlocked)) {
-                                        router.navigate('/');
-                                    }
-                                }}
-                            />
-                        ))
+                        displayItems.map((item) =>
+                            item.type === 'time-marker' ? (
+                                <TimeMarker key={item.id} time={item.time}/>
+                            ) : (
+                                <MessageBubble
+                                    key={item.id}
+                                    event={item.event}
+                                    isPlayer={item.event.direction === 'outgoing'}
+                                    accentColor={theme.text}
+                                    onAppLinkPress={(appId) => {
+                                        if (apps.some((app) => app.id === appId && app.isUnlocked)) {
+                                            router.navigate('/');
+                                        }
+                                    }}
+                                />
+                            )
+                        )
                     )}
 
                     {conversation.activeTyping ? (
@@ -105,6 +109,18 @@ export default function ConversationScreen() {
                 </View>
             </SafeAreaView>
         </ThemedView>
+    );
+}
+
+function TimeMarker({time}: { time: string }) {
+    return (
+        <View accessibilityLabel={`Story time: ${time}`} style={styles.timeMarker}>
+            <View style={styles.timeMarkerRule}/>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.timeMarkerText}>
+                {time}
+            </ThemedText>
+            <View style={styles.timeMarkerRule}/>
+        </View>
     );
 }
 
@@ -216,6 +232,20 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         textAlign: 'center',
+    },
+    timeMarker: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: Spacing.two,
+        paddingVertical: Spacing.one,
+    },
+    timeMarkerRule: {
+        flex: 1,
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: '#9095A155',
+    },
+    timeMarkerText: {
+        textTransform: 'uppercase',
     },
     bubbleRow: {
         flexDirection: 'row',

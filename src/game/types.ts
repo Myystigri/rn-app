@@ -26,6 +26,10 @@ export type MessageEvent = {
   direction: MessageDirection;
   text: string;
   /**
+   * A story-authored time label shown as a marker before this message.
+   */
+  time?: string;
+  /**
    * Optional rich text produced by the Ink adapter. Omitted for legacy/plain-text messages.
    */
   content?: MessageContentSegment[];
