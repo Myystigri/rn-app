@@ -4,6 +4,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { InAppNotifications } from '@/components/in-app-notifications';
 import { ThemedView } from '@/components/themed-view';
 import { GameProvider } from '@/game/game-provider';
 import { migrateGameDbIfNeeded } from '@/game/persistence/migrations';
@@ -23,6 +24,7 @@ export default function RootLayout() {
           <GameProvider>
             <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
             <AppNavigator colorScheme={colorScheme} />
+            <InAppNotifications />
           </GameProvider>
         </SQLiteProvider>
       </SafeAreaProvider>

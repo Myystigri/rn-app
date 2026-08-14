@@ -32,7 +32,7 @@ describe('InkStorySession', () => {
           speakerId: 'maya',
           direction: 'incoming',
           text: "So ?! How's the phone ?? Does it still work ?",
-          time: '12:34',
+          time: '11:01',
         },
       ],
       pendingChoices: [
@@ -60,8 +60,22 @@ describe('InkStorySession', () => {
       'main.event.3',
       'main.event.4',
       'main.event.5',
+      'main.event.6',
+      'main.event.7',
       'intro.unlock.insta',
+      'intro.notification.insta',
     ]);
+    expect(conversation?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'notification',
+          id: 'intro.notification.insta',
+          appId: 'insta',
+          title: 'Insta unlocked',
+          body: 'Insta is now available on your phone.',
+        }),
+      ])
+    );
     expect(conversation?.pendingChoices).toEqual([
       { id: 0, text: "I don't like social networks" },
       { id: 1, text: "Sure I'll try and download it" },
@@ -84,7 +98,10 @@ describe('InkStorySession', () => {
         }),
       ])
     );
-    expect(session.conversationSnapshot(mayaConversationId)?.pendingChoices).toEqual([]);
+    expect(session.conversationSnapshot(mayaConversationId)?.pendingChoices).toEqual([
+      { id: 0, text: "I don't like social networks" },
+      { id: 1, text: "Sure I'll try and download it" },
+    ]);
   });
 
   it('rejects an incompatible saved story version', () => {

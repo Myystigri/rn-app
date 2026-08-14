@@ -20,6 +20,7 @@ Pipeline:
 
 # Ink
 
+Full Ink documentation https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md
 - Authored Ink lives under `src/story/`.
 - Runtime uses checked-in generated `.story.json`; never compile Ink on-device.
 - `Story` comes from `inkjs`; `Compiler` comes from `inkjs/full`.
